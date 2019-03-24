@@ -1,0 +1,69 @@
+                              libmcastrx 1
+                   (Library for receiving multicast)
+
+              Written by Jake Holland <jakeholland.net@gmail.com>
+
+  BSD Licensed (see LICENSE)
+  Copyright 2019 Akamai Technologies, Inc. & Jake Holland
+
+DESCRIPTION
+
+  This library implements multicast receiving logic, including native
+  and AMT with automatic discovery as described by DRIAD (including
+  DNS-SD).
+  draft-ietf-mboned-driad-amt-discovery
+
+REQUIREMENTS
+
+  To bootstrap from a Git checkout, or if you change the Automake files
+  and need to regenerate Makefile.in, you will need Automake 1.11 or
+  later.  For bootstrap or if you change configure.ac or any of the m4
+  files it includes and need to regenerate configure or config.h.in, you
+  will need Autoconf 2.60 or later.
+
+  Also useful are a C++ compiler and some mild insanity.
+
+BUILDING
+
+  You can build libmcastrx with:
+
+      ./configure
+      make
+
+  Pass --enable-logging to configure to enable logging functionality.
+
+  Pass --enable-debug to configure to enable debug messages.
+
+TESTING
+
+  libmcastrx comes with a test suite, which you can run after building
+  with:
+
+      make check
+
+USING THIS CODE
+
+  While there is an install target, it's present only because Automake
+  provides it automatically.  Its use is not recommended.  Instead, the
+  code in this package is intended to be copied into your package and
+  serves only as a template.
+
+HOMEPAGE AND SOURCE REPOSITORY
+
+  The libmcastrx web page is at:
+
+      http://github.com/GrumpyOldTroll/libmcastrx
+
+  libmcastrx is maintained using Git.  You can access the current source
+  by cloning the repository at:
+
+  Please send any bug reports, patches, or questions to
+  jakeholland.net@gmail.com.
+
+THANKS
+
+  Thanks to Kay Sievers and Lennart Poettering for their libabc template
+  library, it's a wonderfully useful starting point.
+  http://0pointer.de/blog/projects/libabc.html
+  https://git.kernel.org/pub/scm/linux/kernel/git/kay/libabc.git/plain/README
+

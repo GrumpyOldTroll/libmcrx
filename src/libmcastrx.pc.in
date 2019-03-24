@@ -1,0 +1,12 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: libmcastrx
+Description: multicast receiving library
+URL: http://www.jakeholland.net/mcastrx/dist/libmcastrx-@VERSION@.tar.xz
+Version: @VERSION@
+Libs: -L${libdir} -lmcastrx
+Libs.private:
+Cflags: -I${includedir}

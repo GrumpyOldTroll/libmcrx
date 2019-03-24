@@ -1,0 +1,9 @@
+.dirstamp
+.deps/
+.libs/
+*.la
+*.lo
+libmcastrx.pc
+test-libmcastrx
+.*.sw?
+*~
