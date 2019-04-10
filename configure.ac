@@ -34,6 +34,24 @@ AS_IF([test "x$enable_debug" = "xyes"], [
         AC_DEFINE(ENABLE_DEBUG, [1], [Debug messages.])
 ])
 
+#AC_CHECK_HEADER([event.h],
+#     [AC_DEFINE([HAVE_EVENT_H], [1], [Define to 1 if you have <event.h>.])],
+#     [AC_MSG_ERROR([could not include <event.h>. You need to install libevent-dev or build from https://github.com/libevent/libevent.git and set C_INCLUDE_PATH and LIBRARY_PATH])])
+#
+#AC_CHECK_LIB([event],[event_base_new],
+#	[AC_DEFINE([HAVE_EVENT_LIB], [1], [Define to 1 if you have libevent])],
+#	[AC_MSG_ERROR([could not invoke event_base_new with -levent, you need to install libevent-dev or build from https://github.com/libevent/libevent.git and set C_INCLUDE_PATH and LIBRARY_PATH])])
+#
+AC_CHECK_HEADER([dns_sd.h],
+     [AC_DEFINE([HAVE_DNSSD_H], [1], [Define to 1 if you have <dns_sd.h>.])],
+     [AC_MSG_ERROR([could not include <dns_sd.h>. You need to install mdnsd or build from https://github.com/IETF-Hackathon/mDNSResponder.git (mDNSPosix) and set C_INCLUDE_PATH and LIBRARY_PATH])])
+
+# commenting for mac.  it's not libdns_sd, it's part of system libraries,
+# so there needs to be a mac/other special case.
+#AC_CHECK_LIB([dns_sd],[DNSServiceRegister],
+#	[AC_DEFINE([HAVE_DNSSD_LIB], [1], [Define to 1 if you have libdns_sd])],
+#	[AC_MSG_ERROR([could not load libdns_sd.so. You need to install mdnsd or build from https://github.com/IETF-Hackathon/mDNSResponder.git (mDNSPosix) and set C_INCLUDE_PATH and LIBRARY_PATH])])
+
 my_CFLAGS="-pedantic -Wall -Wextra \
 -Wmissing-declarations -Wmissing-prototypes \
 -Wnested-externs -Wsign-compare \

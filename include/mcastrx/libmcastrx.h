@@ -18,6 +18,9 @@
 
 #pragma once
 
+#ifndef GUARD_LIBMCASTRX_H
+#define GUARD_LIBMCASTRX_H
+
 #include <stdarg.h>
 
 #ifdef __cplusplus
@@ -72,3 +75,5 @@ struct mcastrx_list_entry *mcastrx_thing_get_some_list_entry(struct mcastrx_thin
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+
+#endif  // GUARD_LIBMCASTRX_H

@@ -20,7 +20,7 @@ AM_CFLAGS = ${my_CFLAGS} \
 	-ffunction-sections \
 	-fdata-sections
 
-AM_LDFLAGS =
+#AM_LDFLAGS = -levent
 
 SED_PROCESS = \
 	$(AM_V_GEN)$(MKDIR_P) $(dir $@) && $(SED) \

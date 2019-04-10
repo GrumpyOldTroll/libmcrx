@@ -18,6 +18,9 @@
 
 #pragma once
 
+#ifndef GUARD_LIBMCASTRX_PRIVATE_H_
+#define GUARD_LIBMCASTRX_PRIVATE_H_
+
 #include <stdbool.h>
 #include <syslog.h>
 
@@ -58,3 +61,5 @@ void mcastrx_log(struct mcastrx_ctx *ctx,
            int priority, const char *file, int line, const char *fn,
            const char *format, ...)
            __attribute__((format(printf, 6, 7)));
+
+#endif  // GUARD_LIBMCASTRX_PRIVATE_H_
