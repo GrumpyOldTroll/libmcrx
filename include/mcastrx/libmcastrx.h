@@ -38,39 +38,14 @@ struct mcastrx_ctx *mcastrx_ref(struct mcastrx_ctx *ctx);
 struct mcastrx_ctx *mcastrx_unref(struct mcastrx_ctx *ctx);
 int mcastrx_new(struct mcastrx_ctx **ctx);
 void mcastrx_set_log_fn(struct mcastrx_ctx *ctx,
-                  void (*log_fn)(struct mcastrx_ctx *ctx,
-                                 int priority, const char *file, int line, const char *fn,
-                                 const char *format, va_list args));
+                        void (*log_fn)(struct mcastrx_ctx *ctx, int priority,
+                                       const char *file, int line,
+                                       const char *fn, const char *format,
+                                       va_list args));
 int mcastrx_get_log_priority(struct mcastrx_ctx *ctx);
 void mcastrx_set_log_priority(struct mcastrx_ctx *ctx, int priority);
 void *mcastrx_get_userdata(struct mcastrx_ctx *ctx);
 void mcastrx_set_userdata(struct mcastrx_ctx *ctx, void *userdata);
-
-/*
- * mcastrx_list
- *
- * access to mcastrx generated lists
- */
-struct mcastrx_list_entry;
-struct mcastrx_list_entry *mcastrx_list_entry_get_next(struct mcastrx_list_entry *list_entry);
-const char *mcastrx_list_entry_get_name(struct mcastrx_list_entry *list_entry);
-const char *mcastrx_list_entry_get_value(struct mcastrx_list_entry *list_entry);
-#define mcastrx_list_entry_foreach(list_entry, first_entry) \
-        for (list_entry = first_entry; \
-             list_entry != NULL; \
-             list_entry = mcastrx_list_entry_get_next(list_entry))
-
-/*
- * mcastrx_thing
- *
- * access to things of mcastrx
- */
-struct mcastrx_thing;
-struct mcastrx_thing *mcastrx_thing_ref(struct mcastrx_thing *thing);
-struct mcastrx_thing *mcastrx_thing_unref(struct mcastrx_thing *thing);
-struct mcastrx_ctx *mcastrx_thing_get_ctx(struct mcastrx_thing *thing);
-int mcastrx_thing_new_from_string(struct mcastrx_ctx *ctx, const char *string, struct mcastrx_thing **thing);
-struct mcastrx_list_entry *mcastrx_thing_get_some_list_entry(struct mcastrx_thing *thing);
 
 #ifdef __cplusplus
 } /* extern "C" */

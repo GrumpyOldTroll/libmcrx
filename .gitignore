@@ -1,4 +1,5 @@
 *.o
+*.lint
 .deps/
 .libs/
 Makefile

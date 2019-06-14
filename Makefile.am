@@ -45,6 +45,20 @@ src_libmcastrx_la_SOURCES =\
 	src/libmcastrx-private.h \
 	src/libmcastrx.c
 
+# with thanks:
+# https://stackoverflow.com/questions/29811970/adding-linting-to-autotools-based-build-system
+LINTFILES = $(src_libmcastrx_la_SOURCES) $(pkginclude_HEADERS)
+LINTTARGETS = $(LINTFILES:%=%.lint)
+
+lint: $(LINTTARGETS)
+
+%.lint: %
+	$(CPPLINT) $? | tee $@
+
+all-local: lint
+
+.PHONY: lint
+
 EXTRA_DIST += src/libmcastrx.sym
 
 src_libmcastrx_la_LDFLAGS = $(AM_LDFLAGS) \

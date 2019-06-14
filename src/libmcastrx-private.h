@@ -29,37 +29,35 @@
 #define UNUSED(x) ((void)x)
 
 static inline void __attribute__((always_inline, format(printf, 2, 3)))
-mcastrx_log_null(struct mcastrx_ctx *ctx, const char *format, ...)
-{
-     UNUSED(ctx);
-     UNUSED(format);
+mcastrx_log_null(struct mcastrx_ctx *ctx, const char *format, ...) {
+  UNUSED(ctx);
+  UNUSED(format);
 }
 
-#define mcastrx_log_cond(ctx, prio, ...) \
-  do { \
-    if (mcastrx_get_log_priority(ctx) >= prio) \
+#define mcastrx_log_cond(ctx, prio, ...)                                     \
+  do {                                                                       \
+    if (mcastrx_get_log_priority(ctx) >= prio)                               \
       mcastrx_log(ctx, prio, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__); \
   } while (0)
 
 #ifdef ENABLE_LOGGING
-#  ifdef ENABLE_DEBUG
-#    define dbg(ctx, ...) mcastrx_log_cond(ctx, LOG_DEBUG, __VA_ARGS__)
-#  else
-#    define dbg(ctx, ...) mcastrx_log_null(ctx, __VA_ARGS__)
-#  endif
-#  define info(ctx, ...) mcastrx_log_cond(ctx, LOG_INFO, __VA_ARGS__)
-#  define err(ctx, ...) mcastrx_log_cond(ctx, LOG_ERR, __VA_ARGS__)
+#ifdef ENABLE_DEBUG
+#define dbg(ctx, ...) mcastrx_log_cond(ctx, LOG_DEBUG, __VA_ARGS__)
 #else
-#  define dbg(ctx, ...) mcastrx_log_null(ctx, __VA_ARGS__)
-#  define info(ctx, ...) mcastrx_log_null(ctx, __VA_ARGS__)
-#  define err(ctx, ...) mcastrx_log_null(ctx, __VA_ARGS__)
+#define dbg(ctx, ...) mcastrx_log_null(ctx, __VA_ARGS__)
+#endif
+#define info(ctx, ...) mcastrx_log_cond(ctx, LOG_INFO, __VA_ARGS__)
+#define err(ctx, ...) mcastrx_log_cond(ctx, LOG_ERR, __VA_ARGS__)
+#else
+#define dbg(ctx, ...) mcastrx_log_null(ctx, __VA_ARGS__)
+#define info(ctx, ...) mcastrx_log_null(ctx, __VA_ARGS__)
+#define err(ctx, ...) mcastrx_log_null(ctx, __VA_ARGS__)
 #endif
 
-#define MCASTRX_EXPORT __attribute__ ((visibility("default")))
+#define MCASTRX_EXPORT __attribute__((visibility("default")))
 
-void mcastrx_log(struct mcastrx_ctx *ctx,
-           int priority, const char *file, int line, const char *fn,
-           const char *format, ...)
-           __attribute__((format(printf, 6, 7)));
+void mcastrx_log(struct mcastrx_ctx *ctx, int priority, const char *file,
+                 int line, const char *fn, const char *format, ...)
+    __attribute__((format(printf, 6, 7)));
 
 #endif  // GUARD_LIBMCASTRX_PRIVATE_H_
