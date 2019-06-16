@@ -3,7 +3,7 @@
 .libs/
 *.la
 *.lo
-libmcastrx.pc
-test-libmcastrx
+libmcrx.pc
+test1-libmcrx
 .*.sw?
 *~

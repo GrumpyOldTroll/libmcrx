@@ -1,5 +1,5 @@
 /*
- * libmrx - multicast receiving library
+ * libmcrx - multicast receiving library
  *
  * Copyright (C) 2019 by Akamai Technologies
  *    Jake Holland <jakeholland.net@gmail.com>
@@ -18,48 +18,48 @@
 
 #pragma once
 
-#ifndef GUARD_LIBMCASTRX_PRIVATE_H_
-#define GUARD_LIBMCASTRX_PRIVATE_H_
+#ifndef GUARD_LIBMCRX_PRIVATE_H_
+#define GUARD_LIBMCRX_PRIVATE_H_
 
 #include <stdbool.h>
 #include <syslog.h>
 
-#include <mcastrx/libmcastrx.h>
+#include <mcrx/libmcrx.h>
 
 #define UNUSED(x) ((void)x)
 
 static inline void __attribute__((always_inline, format(printf, 2, 3)))
-mrx_log_null(struct mrx_ctx *ctx, const char *format, ...) {
+mcrx_log_null(struct mcrx_ctx *ctx, const char *format, ...) {
   UNUSED(ctx);
   UNUSED(format);
 }
 
-#define mrx_log_cond(ctx, prio, ...)                                     \
+#define mcrx_log_cond(ctx, prio, ...)                                     \
   do {                                                                       \
-    if (mrx_ctx_get_log_priority(ctx) >= prio)                               \
-      mrx_log(ctx, prio, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__); \
+    if (mcrx_ctx_get_log_priority(ctx) >= prio)                               \
+      mcrx_log(ctx, prio, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__); \
   } while (0)
 
 #ifdef ENABLE_LOGGING
 #ifdef ENABLE_DEBUG
-#define dbg(ctx, ...) mrx_log_cond(ctx, LOG_DEBUG, __VA_ARGS__)
+#define dbg(ctx, ...) mcrx_log_cond(ctx, LOG_DEBUG, __VA_ARGS__)
 #else
-#define dbg(ctx, ...) mrx_log_null(ctx, __VA_ARGS__)
+#define dbg(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
 #endif
-#define info(ctx, ...) mrx_log_cond(ctx, LOG_INFO, __VA_ARGS__)
-#define warn(ctx, ...) mrx_log_cond(ctx, LOG_WARNING, __VA_ARGS__)
-#define err(ctx, ...) mrx_log_cond(ctx, LOG_ERR, __VA_ARGS__)
+#define info(ctx, ...) mcrx_log_cond(ctx, LOG_INFO, __VA_ARGS__)
+#define warn(ctx, ...) mcrx_log_cond(ctx, LOG_WARNING, __VA_ARGS__)
+#define err(ctx, ...) mcrx_log_cond(ctx, LOG_ERR, __VA_ARGS__)
 #else
-#define dbg(ctx, ...) mrx_log_null(ctx, __VA_ARGS__)
-#define info(ctx, ...) mrx_log_null(ctx, __VA_ARGS__)
-#define warn(ctx, ...) mrx_log_null(ctx, __VA_ARGS__)
-#define err(ctx, ...) mrx_log_null(ctx, __VA_ARGS__)
+#define dbg(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
+#define info(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
+#define warn(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
+#define err(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
 #endif
 
-#define MCASTRX_EXPORT __attribute__((visibility("default")))
+#define MCRX_EXPORT __attribute__((visibility("default")))
 
-void mrx_log(struct mrx_ctx *ctx, int priority, const char *file,
+void mcrx_log(struct mcrx_ctx *ctx, int priority, const char *file,
                  int line, const char *fn, const char *format, ...)
     __attribute__((format(printf, 6, 7)));
 
-#endif  // GUARD_LIBMCASTRX_PRIVATE_H_
+#endif  // GUARD_LIBMCRX_PRIVATE_H_

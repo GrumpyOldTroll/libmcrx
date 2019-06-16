@@ -1,5 +1,5 @@
 /*
- * libmcastrx - multicast receiving library
+ * libmcrx - multicast receiving library
  *
  * Copyright (C) 2019 by Akamai Technologies
  *    Jake Holland <jakeholland.net@gmail.com>
@@ -25,17 +25,17 @@
 #include <errno.h>
 #include <unistd.h>
 
-#include <mcastrx/libmcastrx.h>
+#include <mcrx/libmcrx.h>
 
 static int npackets = 0;
-static void receive_cb(struct mrx_packet* pkt) {
-  unsigned int length = mrx_packet_get_contents(pkt, 0);
+static void receive_cb(struct mcrx_packet* pkt) {
+  unsigned int length = mcrx_packet_get_contents(pkt, 0);
   printf("got packet, length=%u\n", length);
   npackets += 1;
   if (npackets > 5) {
-    mrx_subscription_leave(mrx_packet_get_subscription(pkt));
+    mcrx_subscription_leave(mcrx_packet_get_subscription(pkt));
   }
-  mrx_packet_unref(pkt);
+  mcrx_packet_unref(pkt);
 }
 
 int
@@ -44,11 +44,11 @@ main(int argc, char *argv[])
   (void)(argc);
   (void)(argv);
 
-  struct mrx_ctx *ctx;
-  struct mrx_subscription *sub = NULL;
+  struct mcrx_ctx *ctx;
+  struct mcrx_subscription *sub = NULL;
   int err;
 
-  err = mrx_ctx_new(&ctx);
+  err = mcrx_ctx_new(&ctx);
   if (err < 0) {
     fprintf(stderr, "ctx_new failed\n");
     return EXIT_FAILURE;
@@ -56,36 +56,36 @@ main(int argc, char *argv[])
 
   printf("version %s\n", VERSION);
 
-  struct mrx_subscription_config cfg = MRX_SUBSCRIPTION_INIT;
+  struct mcrx_subscription_config cfg = MRX_SUBSCRIPTION_INIT;
   cfg.addr_type = MRX_ADDR_TYPE_DNS;
   cfg.addrs.dns.source = "23.212.185.1";
   cfg.addrs.dns.group = "232.10.10.1";
   cfg.port = 5001;
 
-  err = mrx_subscription_new(ctx, &cfg, &sub);
+  err = mcrx_subscription_new(ctx, &cfg, &sub);
   if (err < 0) {
     fprintf(stderr, "new subscription failed\n");
-    mrx_ctx_unref(ctx);
+    mcrx_ctx_unref(ctx);
     return EXIT_FAILURE;
   }
 
-  err = mrx_subscription_join(sub, receive_cb);
+  err = mcrx_subscription_join(sub, receive_cb);
   if (err < 0) {
     fprintf(stderr, "subscription join failed\n");
-    mrx_subscription_unref(sub);
-    mrx_ctx_unref(ctx);
+    mcrx_subscription_unref(sub);
+    mcrx_ctx_unref(ctx);
     return EXIT_FAILURE;
   }
 
-  err = mrx_ctx_receive_packets(ctx, -1);
+  err = mcrx_ctx_receive_packets(ctx, -1);
   if (err < 0) {
     fprintf(stderr, "subscription receive failed\n");
-    mrx_subscription_unref(sub);
-    mrx_ctx_unref(ctx);
+    mcrx_subscription_unref(sub);
+    mcrx_ctx_unref(ctx);
     return EXIT_FAILURE;
   }
 
-  mrx_subscription_unref(sub);
-  mrx_ctx_unref(ctx);
+  mcrx_subscription_unref(sub);
+  mcrx_ctx_unref(ctx);
   return EXIT_SUCCESS;
 }

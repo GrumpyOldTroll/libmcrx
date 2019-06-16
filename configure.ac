@@ -1,10 +1,10 @@
 AC_PREREQ(2.60)
-AC_INIT([mcastrx],
+AC_INIT([mcrx],
         [1],
         [jakeholland.net@gmail.com],
-        [mcastrx],
-        [http://github.com/GrumpyOldTroll/libmcastrx])
-AC_CONFIG_SRCDIR([src/libmcastrx.c])
+        [mcrx],
+        [http://github.com/GrumpyOldTroll/libmcrx])
+AC_CONFIG_SRCDIR([src/libmcrx.c])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_LIBOBJ_DIR([portable])
 AM_INIT_AUTOMAKE([check-news foreign 1.11 -Wall -Werror -Wno-portability silent-rules tar-pax no-dist-gzip dist-xz subdir-objects])

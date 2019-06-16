@@ -34,20 +34,20 @@ SED_PROCESS = \
 %.pc: %.pc.in Makefile
 	$(SED_PROCESS)
 
-LIBMCASTRX_CURRENT=2
-LIBMCASTRX_REVISION=0
-LIBMCASTRX_AGE=2
+LIBMCRX_CURRENT=2
+LIBMCRX_REVISION=0
+LIBMCRX_AGE=2
 
-pkginclude_HEADERS = include/mcastrx/libmcastrx.h
-lib_LTLIBRARIES = src/libmcastrx.la
+pkginclude_HEADERS = include/mcrx/libmcrx.h
+lib_LTLIBRARIES = src/libmcrx.la
 
-src_libmcastrx_la_SOURCES =\
-	src/libmcastrx-private.h \
-	src/libmcastrx.c
+src_libmcrx_la_SOURCES =\
+	src/libmcrx-private.h \
+	src/libmcrx.c
 
 # with thanks:
 # https://stackoverflow.com/questions/29811970/adding-linting-to-autotools-based-build-system
-LINTFILES = $(src_libmcastrx_la_SOURCES) $(pkginclude_HEADERS)
+LINTFILES = $(src_libmcrx_la_SOURCES) $(pkginclude_HEADERS)
 LINTTARGETS = $(LINTFILES:%=%.lint)
 
 lint: $(LINTTARGETS)
@@ -59,19 +59,19 @@ all-local: lint
 
 .PHONY: lint
 
-EXTRA_DIST += src/libmcastrx.sym
+EXTRA_DIST += src/libmcrx.sym
 
-src_libmcastrx_la_LDFLAGS = $(AM_LDFLAGS) \
-	-version-info $(LIBMCASTRX_CURRENT):$(LIBMCASTRX_REVISION):$(LIBMCASTRX_AGE)
-src_libmcastrx_la_DEPENDENCIES = ${top_srcdir}/src/libmcastrx.sym
+src_libmcrx_la_LDFLAGS = $(AM_LDFLAGS) \
+	-version-info $(LIBMCRX_CURRENT):$(LIBMCRX_REVISION):$(LIBMCRX_AGE)
+src_libmcrx_la_DEPENDENCIES = ${top_srcdir}/src/libmcrx.sym
 
 pkgconfigdir = $(libdir)/pkgconfig
-nodist_pkgconfig_DATA = src/libmcastrx.pc
-EXTRA_DIST += src/libmcastrx.pc.in
-CLEANFILES += src/libmcastrx.pc
+nodist_pkgconfig_DATA = src/libmcrx.pc
+EXTRA_DIST += src/libmcrx.pc.in
+CLEANFILES += src/libmcrx.pc
 
-TESTS = test/test-libmcastrx
+TESTS = test/test1-libmcrx
 
-check_PROGRAMS = test/test-libmcastrx
-test_test_libmcastrx_SOURCES = test/test-libmcastrx.c
-test_test_libmcastrx_LDADD = src/libmcastrx.la
+check_PROGRAMS = test/test1-libmcrx
+test_test1_libmcrx_SOURCES = test/test1-libmcrx.c
+test_test1_libmcrx_LDADD = src/libmcrx.la

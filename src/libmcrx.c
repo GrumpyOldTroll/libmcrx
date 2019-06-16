@@ -1,5 +1,5 @@
 /*
- * libmrx - multicast receiving library
+ * libmcrx - multicast receiving library
  *
  * Copyright (C) 2019 by Akamai Technologies
  *    Jake Holland <jakeholland.net@gmail.com>
@@ -25,32 +25,32 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <mcastrx/libmcastrx.h>
-#include "./libmcastrx-private.h"
+#include <mcrx/libmcrx.h>
+#include "./libmcrx-private.h"
 
 /**
- * SECTION:libmcastrx
- * @short_description: libmcastrx context
+ * SECTION:libmcrx
+ * @short_description: libmcrx context
  *
  * The context contains the default values for the library user,
  * and is passed to all library operations.
  */
 
 /**
- * mrx_ctx:
+ * mcrx_ctx:
  *
  * Opaque object representing the library context.
  */
-struct mrx_ctx {
+struct mcrx_ctx {
   int refcount;
-  void (*log_fn)(struct mrx_ctx *ctx, int priority, const char *file,
+  void (*log_fn)(struct mcrx_ctx *ctx, int priority, const char *file,
                  int line, const char *fn, const char *format, va_list args);
   intptr_t userdata;
   int log_priority;
 };
 
-void mrx_log(
-    struct mrx_ctx *ctx,
+void mcrx_log(
+    struct mcrx_ctx *ctx,
     int priority,
     const char *file,
     int line,
@@ -65,7 +65,7 @@ void mrx_log(
 }
 
 static void log_stderr(
-    struct mrx_ctx *ctx,
+    struct mcrx_ctx *ctx,
     int priority,
     const char *file,
     int line,
@@ -77,21 +77,21 @@ static void log_stderr(
   UNUSED(file);
   UNUSED(line);
 
-  fprintf(stderr, "libmrx: %s: ", fn);
+  fprintf(stderr, "libmcrx: %s: ", fn);
   vfprintf(stderr, format, args);
 }
 
 /**
- * mrx_ctx_get_userdata:
- * @ctx: mrx library context
+ * mcrx_ctx_get_userdata:
+ * @ctx: mcrx library context
  *
  * Retrieve stored data pointer from library context. This might be useful
  * to access from callbacks like a custom logging function.
  *
  * Returns: stored userdata
  **/
-MCASTRX_EXPORT intptr_t mrx_ctx_get_userdata(
-    struct mrx_ctx *ctx) {
+MCRX_EXPORT intptr_t mcrx_ctx_get_userdata(
+    struct mcrx_ctx *ctx) {
   if (ctx == NULL) {
     return 0;
   }
@@ -100,14 +100,14 @@ MCASTRX_EXPORT intptr_t mrx_ctx_get_userdata(
 }
 
 /**
- * mrx_ctx_set_userdata:
- * @ctx: mrx library context
+ * mcrx_ctx_set_userdata:
+ * @ctx: mcrx library context
  * @userdata: data pointer
  *
  * Store custom @userdata in the library context.
  **/
-MCASTRX_EXPORT void mrx_ctx_set_userdata(
-    struct mrx_ctx *ctx,
+MCRX_EXPORT void mcrx_ctx_set_userdata(
+    struct mcrx_ctx *ctx,
     intptr_t userdata) {
   if (ctx == NULL) {
     return;
@@ -143,22 +143,22 @@ static int log_priority(
 }
 
 /**
- * mrx_ctx_new:
+ * mcrx_ctx_new:
  *
- * Create mrx library context. This reads the mrx configuration
+ * Create mcrx library context. This reads the mcrx configuration
  * and fills in the default values.
  *
  * The initial refcount is 1, and needs to be decremented to
- * release the resources of the mrx library context.
+ * release the resources of the mcrx library context.
  *
- * Returns: a new mrx library context
+ * Returns: a new mcrx library context
  **/
-MCASTRX_EXPORT int mrx_ctx_new(
-    struct mrx_ctx **ctx) {
+MCRX_EXPORT int mcrx_ctx_new(
+    struct mcrx_ctx **ctx) {
   const char *env;
-  struct mrx_ctx *c;
+  struct mcrx_ctx *c;
 
-  c = calloc(1, sizeof(struct mrx_ctx));
+  c = calloc(1, sizeof(struct mcrx_ctx));
   if (!c) {
     return -ENOMEM;
   }
@@ -168,9 +168,9 @@ MCASTRX_EXPORT int mrx_ctx_new(
   c->log_priority = LOG_ERR;
 
   /* environment overwrites config */
-  env = getenv("MCASTRX_LOG");
+  env = getenv("MCRX_LOG");
   if (env != NULL) {
-    mrx_ctx_set_log_priority(c, log_priority(env));
+    mcrx_ctx_set_log_priority(c, log_priority(env));
   }
 
   info(c, "version %s context %p created\n", VERSION, (void *)c);
@@ -180,15 +180,15 @@ MCASTRX_EXPORT int mrx_ctx_new(
 }
 
 /**
- * mrx_ctx_ref:
- * @ctx: mrx library context
+ * mcrx_ctx_ref:
+ * @ctx: mcrx library context
  *
- * Take a reference of the mrx library context.
+ * Take a reference of the mcrx library context.
  *
- * Returns: the passed mrx library context
+ * Returns: the passed mcrx library context
  **/
-MCASTRX_EXPORT struct mrx_ctx *mrx_ctx_ref(
-    struct mrx_ctx *ctx) {
+MCRX_EXPORT struct mcrx_ctx *mcrx_ctx_ref(
+    struct mcrx_ctx *ctx) {
   if (ctx == NULL) {
     return NULL;
   }
@@ -198,15 +198,15 @@ MCASTRX_EXPORT struct mrx_ctx *mrx_ctx_ref(
 }
 
 /**
- * mrx_ctx_unref:
- * @ctx: mrx library context
+ * mcrx_ctx_unref:
+ * @ctx: mcrx library context
  *
- * Drop a reference of the mrx library context. If the refcount
+ * Drop a reference of the mcrx library context. If the refcount
  * reaches zero, the resources of the context will be released.
  *
  **/
-MCASTRX_EXPORT struct mrx_ctx *mrx_ctx_unref(
-    struct mrx_ctx *ctx) {
+MCRX_EXPORT struct mcrx_ctx *mcrx_ctx_unref(
+    struct mcrx_ctx *ctx) {
   if (ctx == NULL) {
     return NULL;
   }
@@ -222,8 +222,8 @@ MCASTRX_EXPORT struct mrx_ctx *mrx_ctx_unref(
 }
 
 /**
- * mrx_ctx_set_log_fn:
- * @ctx: mrx library context
+ * mcrx_ctx_set_log_fn:
+ * @ctx: mcrx library context
  * @log_fn: function to be called for logging messages
  *
  * The built-in logging writes to stderr. It can be
@@ -231,10 +231,10 @@ MCASTRX_EXPORT struct mrx_ctx *mrx_ctx_unref(
  * into the user's logging functionality.
  *
  **/
-MCASTRX_EXPORT void mrx_ctx_set_log_fn(
-    struct mrx_ctx *ctx,
+MCRX_EXPORT void mcrx_ctx_set_log_fn(
+    struct mcrx_ctx *ctx,
     void (*log_fn)(
-      struct mrx_ctx *ctx,
+      struct mcrx_ctx *ctx,
       int priority,
       const char *file,
       int line,
@@ -246,26 +246,26 @@ MCASTRX_EXPORT void mrx_ctx_set_log_fn(
 }
 
 /**
- * mrx_ctx_get_log_priority:
- * @ctx: mrx library context
+ * mcrx_ctx_get_log_priority:
+ * @ctx: mcrx library context
  *
  * Returns: the current logging priority
  **/
-MCASTRX_EXPORT int mrx_ctx_get_log_priority(
-    struct mrx_ctx *ctx) {
+MCRX_EXPORT int mcrx_ctx_get_log_priority(
+    struct mcrx_ctx *ctx) {
   return ctx->log_priority;
 }
 
 /**
- * mrx_ctx_set_log_priority:
- * @ctx: mrx library context
+ * mcrx_ctx_set_log_priority:
+ * @ctx: mcrx library context
  * @priority: the new logging priority
  *
  * Set the current logging priority. The value controls which messages
  * are logged.
  **/
-MCASTRX_EXPORT void mrx_ctx_set_log_priority(
-    struct mrx_ctx *ctx,
+MCRX_EXPORT void mcrx_ctx_set_log_priority(
+    struct mcrx_ctx *ctx,
     int priority) {
   ctx->log_priority = priority;
 }

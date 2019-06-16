@@ -1,4 +1,4 @@
-                              libmcastrx 1
+                              libmcrx 1
                    (Library for receiving multicast)
 
               Written by Jake Holland <jakeholland.net@gmail.com>
@@ -27,7 +27,7 @@ REQUIREMENTS
 
 BUILDING
 
-  You can build libmcastrx with:
+  You can build libmcrx with:
 
       ./configure
       make
@@ -42,7 +42,7 @@ BUILDING
 
 TESTING
 
-  libmcastrx comes with a test suite, which you can run after building
+  libmcrx comes with a test suite, which you can run after building
   with:
 
       make check
@@ -56,11 +56,11 @@ USING THIS CODE
 
 HOMEPAGE AND SOURCE REPOSITORY
 
-  The libmcastrx web page is at:
+  The libmcrx web page is at:
 
-      http://github.com/GrumpyOldTroll/libmcastrx
+      http://github.com/GrumpyOldTroll/libmcrx
 
-  libmcastrx is maintained using Git.  You can access the current source
+  libmcrx is maintained using Git.  You can access the current source
   by cloning the repository at:
 
   Please send any bug reports, patches, or questions to

@@ -1,0 +1,28 @@
+LIBMCRX_1 {
+global:
+        mcrx_ctx_ref;
+        mcrx_ctx_unref;
+        mcrx_ctx_get_userdata;
+        mcrx_ctx_set_userdata;
+        mcrx_ctx_new;
+        mcrx_ctx_set_log_fn;
+        mcrx_ctx_get_log_priority;
+        mcrx_ctx_set_log_priority;
+        mcrx_ctx_receive_packets;
+        mcrx_subscription* mcrx_subscription_ref;
+        mcrx_subscription* mcrx_subscription_unref;
+        mcrx_subscription_get_userdata;
+        mcrx_subscription_set_userdata;
+        mcrx_subscription_get_ctx;
+        mcrx_subscription_new;
+        mcrx_subscription_join;
+        mcrx_subscription_leave;
+        mcrx_packet_ref;
+        mcrx_packet_unref;
+        mcrx_packet_get_userdata;
+        mcrx_packet_set_userdata;
+        mcrx_packet_get_subscription;
+        mcrx_packet_get_contents;
+local:
+        *;
+} LIBMCRX_1;
