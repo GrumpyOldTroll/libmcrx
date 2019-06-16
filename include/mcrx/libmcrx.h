@@ -35,7 +35,21 @@ extern "C" {
  * environment, user variables, allows custom logging
  */
 struct mcrx_ctx;
+
+/*
+ * mcrx_subscription
+ *
+ * subscription handle - joins a (S,G) and passes received
+ * packets to library user.
+ */
 struct mcrx_subscription;
+
+/*
+ * mcrx_packet
+ *
+ * packet handle - provides data and packet lengths to
+ * library user.
+ */
 struct mcrx_packet;
 
 struct mcrx_ctx *mcrx_ctx_ref(
@@ -108,15 +122,24 @@ struct mcrx_subscription_addrs_v6 {
   struct in6_addr group;
 };
 
-enum MRX_ADDR_TYPE {
-  MRX_ADDR_TYPE_DNS,
-  MRX_ADDR_TYPE_V4,
-  MRX_ADDR_TYPE_V6
+enum MCRX_ADDR_TYPE {
+  MCRX_ADDR_TYPE_DNS,
+  MCRX_ADDR_TYPE_V4,
+  MCRX_ADDR_TYPE_V6
 };
 
+/*
+ * mcrx_subscription_config
+ *
+ * config for the subscription object.  Provides the (S,G) either as
+ * a pair of v4 addresses, a pair of v6 addresses, or a pair of DNS
+ * names (which may be address strings, but will error if they don't
+ * match type after resolution).  Also requires UDP port.  Initialize
+ * with MCRX_SUBSCRIPTION_INIT, then overwrite fields as needed.
+ */
 struct mcrx_subscription_config {
   int magic;
-  enum MRX_ADDR_TYPE addr_type;
+  enum MCRX_ADDR_TYPE addr_type;
   union {
     struct mcrx_subscription_addrs_dns dns;
     struct mcrx_subscription_addrs_v4 v4;
@@ -125,9 +148,9 @@ struct mcrx_subscription_config {
   uint16_t port;  // in host byte order (.port = 1024 to get wire=0x0400)
   uint16_t packet_size;
 };
-#define MRX_SUBSCRIPTION_MAGIC 0x42
-#define MRX_SUBSCRIPTION_INIT { \
-  .magic = MRX_SUBSCRIPTION_MAGIC, \
+#define MCRX_SUBSCRIPTION_MAGIC 0x42
+#define MCRX_SUBSCRIPTION_INIT { \
+  .magic = MCRX_SUBSCRIPTION_MAGIC, \
   .packet_size = 1452 \
 }
 

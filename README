@@ -31,6 +31,7 @@ BUILDING
 
       ./configure
       make
+      make check
 
   Pass --enable-logging to configure to enable logging functionality.
 
@@ -38,7 +39,10 @@ BUILDING
 
   To regenerate from scratch:
 
-      aclocal && automake && autoconf && ./configure && make
+      ./autogen.sh
+      ./configure
+      make
+      make check
 
 TESTING
 

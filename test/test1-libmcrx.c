@@ -56,8 +56,8 @@ main(int argc, char *argv[])
 
   printf("version %s\n", VERSION);
 
-  struct mcrx_subscription_config cfg = MRX_SUBSCRIPTION_INIT;
-  cfg.addr_type = MRX_ADDR_TYPE_DNS;
+  struct mcrx_subscription_config cfg = MCRX_SUBSCRIPTION_INIT;
+  cfg.addr_type = MCRX_ADDR_TYPE_DNS;
   cfg.addrs.dns.source = "23.212.185.1";
   cfg.addrs.dns.group = "232.10.10.1";
   cfg.port = 5001;
