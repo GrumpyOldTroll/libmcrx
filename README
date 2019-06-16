@@ -10,8 +10,10 @@ DESCRIPTION
 
   This library implements multicast receiving logic, including native
   and AMT with automatic discovery as described by DRIAD (including
-  DNS-SD).
+  DNS-SD), and authentication/loss reporting/bandwidth limits using
+  AMBI.
   draft-ietf-mboned-driad-amt-discovery
+  draft-jholland-mboned-ambi
 
 REQUIREMENTS
 

@@ -27,25 +27,65 @@
 
 #include <mcastrx/libmcastrx.h>
 
+static int npackets = 0;
+static void receive_cb(struct mrx_packet* pkt) {
+  unsigned int length = mrx_packet_get_contents(pkt, 0);
+  printf("got packet, length=%u\n", length);
+  npackets += 1;
+  if (npackets > 5) {
+    mrx_subscription_leave(mrx_packet_get_subscription(pkt));
+  }
+  mrx_packet_unref(pkt);
+}
+
 int
 main(int argc, char *argv[])
 {
-     struct mcastrx_ctx *ctx;
-     struct mcastrx_thing *thing = NULL;
-     int err;
+  (void)(argc);
+  (void)(argv);
 
-     err = mcastrx_new(&ctx);
-     if (err < 0) {
-          return EXIT_FAILURE;
-     }
+  struct mrx_ctx *ctx;
+  struct mrx_subscription *sub = NULL;
+  int err;
 
-     printf("version %s\n", VERSION);
+  err = mrx_ctx_new(&ctx);
+  if (err < 0) {
+    fprintf(stderr, "ctx_new failed\n");
+    return EXIT_FAILURE;
+  }
 
-     err = mcastrx_thing_new_from_string(ctx, "foo", &thing);
-     if (err >= 0) {
-          mcastrx_thing_unref(thing);
-     }
+  printf("version %s\n", VERSION);
 
-     mcastrx_unref(ctx);
-     return EXIT_SUCCESS;
+  struct mrx_subscription_config cfg = MRX_SUBSCRIPTION_INIT;
+  cfg.addr_type = MRX_ADDR_TYPE_DNS;
+  cfg.addrs.dns.source = "23.212.185.1";
+  cfg.addrs.dns.group = "232.10.10.1";
+  cfg.port = 5001;
+
+  err = mrx_subscription_new(ctx, &cfg, &sub);
+  if (err < 0) {
+    fprintf(stderr, "new subscription failed\n");
+    mrx_ctx_unref(ctx);
+    return EXIT_FAILURE;
+  }
+
+  err = mrx_subscription_join(sub, receive_cb);
+  if (err < 0) {
+    fprintf(stderr, "subscription join failed\n");
+    mrx_subscription_unref(sub);
+    mrx_ctx_unref(ctx);
+    return EXIT_FAILURE;
+  }
+
+  err = mrx_ctx_receive_packets(ctx, -1);
+  if (err < 0) {
+    fprintf(stderr, "subscription receive failed\n");
+    mrx_subscription_unref(sub);
+    mrx_ctx_unref(ctx);
+    return EXIT_FAILURE;
+  }
+
+  mrx_subscription_unref(sub);
+  mrx_ctx_unref(ctx);
+  return EXIT_SUCCESS;
 }
