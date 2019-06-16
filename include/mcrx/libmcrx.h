@@ -63,7 +63,7 @@ void mcrx_ctx_set_userdata(
     intptr_t userdata);
 
 int mcrx_ctx_new(
-    struct mcrx_ctx **ctx);
+    struct mcrx_ctx **ctxp);
 void mcrx_ctx_set_log_fn(
     struct mcrx_ctx *ctx,
     void (*log_fn)(
@@ -145,10 +145,11 @@ struct mcrx_subscription_config {
     struct mcrx_subscription_addrs_v4 v4;
     struct mcrx_subscription_addrs_v6 v6;
   } addrs;
-  uint16_t port;  // in host byte order (.port = 1024 to get wire=0x0400)
+  uint16_t port;  // in host byte order (.port=255 to get wire=0x00ff)
   uint16_t packet_size;
 };
 #define MCRX_SUBSCRIPTION_MAGIC 0x42
+// default values
 #define MCRX_SUBSCRIPTION_INIT { \
   .magic = MCRX_SUBSCRIPTION_MAGIC, \
   .packet_size = 1452 \
@@ -169,7 +170,7 @@ struct mcrx_ctx* mcrx_subscription_get_ctx(
 int mcrx_subscription_new(
     struct mcrx_ctx* ctx,
     const struct mcrx_subscription_config* config,
-    struct mcrx_subscription** sub);
+    struct mcrx_subscription** subp);
 
 int mcrx_subscription_join(
     struct mcrx_subscription* sub,

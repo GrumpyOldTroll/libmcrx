@@ -23,6 +23,7 @@
 
 #include <stdbool.h>
 #include <syslog.h>
+#include <sys/queue.h>
 
 #include <mcrx/libmcrx.h>
 
@@ -61,5 +62,55 @@ mcrx_log_null(struct mcrx_ctx *ctx, const char *format, ...) {
 void mcrx_log(struct mcrx_ctx *ctx, int priority, const char *file,
                  int line, const char *fn, const char *format, ...)
     __attribute__((format(printf, 6, 7)));
+
+/**
+ * mcrx_packet:
+ *
+ * Opaque object representing a received packet.
+ */
+struct mcrx_packet {
+  struct mcrx_subscription *sub;
+  int refcount;
+  intptr_t userdata;
+  TAILQ_ENTRY(mcrx_packet) pkt_entries;
+  // TAILQ_INSERT_TAIL(&sub->pkts_head, pkt, pkt_entries)
+  uint16_t size;
+  uint8_t data[];
+};
+
+/**
+ * mcrx_subscription:
+ *
+ * Opaque object representing a subscription to an (S,G):port.
+ */
+struct mcrx_subscription {
+  struct mcrx_ctx *ctx;
+  int refcount;
+  intptr_t userdata;
+  LIST_ENTRY(mcrx_subscription) sub_entries;
+  TAILQ_HEAD(tailhead, mcrx_packet) pkts_head;
+  struct mcrx_subscription_config input;
+  enum MCRX_ADDR_TYPE resolved_addr_type;
+  union {
+    struct mcrx_subscription_addrs_v4 v4;
+    struct mcrx_subscription_addrs_v6 v6;
+  } resolved;
+  unsigned int source_resolved:1;
+  unsigned int group_resolved:1;
+};
+
+/**
+ * mcrx_ctx:
+ *
+ * Opaque object representing the library context.
+ */
+struct mcrx_ctx {
+  int refcount;
+  void (*log_fn)(struct mcrx_ctx *ctx, int priority, const char *file,
+                 int line, const char *fn, const char *format, va_list args);
+  intptr_t userdata;
+  int log_priority;
+  LIST_HEAD(listhead, mcrx_subscription) subs_head;
+};
 
 #endif  // GUARD_LIBMCRX_PRIVATE_H_

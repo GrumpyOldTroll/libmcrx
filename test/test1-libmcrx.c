@@ -27,15 +27,21 @@
 
 #include <mcrx/libmcrx.h>
 
-static int npackets = 0;
+struct sub_info {
+  int npackets;
+};
+
 static void receive_cb(struct mcrx_packet* pkt) {
   unsigned int length = mcrx_packet_get_contents(pkt, 0);
   printf("got packet, length=%u\n", length);
-  npackets += 1;
-  if (npackets > 5) {
+  struct mcrx_subscription* sub = mcrx_packet_get_subscription(pkt);
+  struct sub_info* info = (struct sub_info*)mcrx_subscription_get_userdata(sub);
+  info->npackets += 1;
+  mcrx_packet_unref(pkt);
+
+  if (info->npackets > 5) {
     mcrx_subscription_leave(mcrx_packet_get_subscription(pkt));
   }
-  mcrx_packet_unref(pkt);
 }
 
 int
@@ -47,14 +53,13 @@ main(int argc, char *argv[])
   struct mcrx_ctx *ctx;
   struct mcrx_subscription *sub = NULL;
   int err;
+  struct sub_info info = { .npackets=0 };
 
   err = mcrx_ctx_new(&ctx);
   if (err < 0) {
     fprintf(stderr, "ctx_new failed\n");
     return EXIT_FAILURE;
   }
-
-  printf("version %s\n", VERSION);
 
   struct mcrx_subscription_config cfg = MCRX_SUBSCRIPTION_INIT;
   cfg.addr_type = MCRX_ADDR_TYPE_DNS;
@@ -68,6 +73,8 @@ main(int argc, char *argv[])
     mcrx_ctx_unref(ctx);
     return EXIT_FAILURE;
   }
+
+  mcrx_subscription_set_userdata(sub, (intptr_t)&info);
 
   err = mcrx_subscription_join(sub, receive_cb);
   if (err < 0) {
@@ -85,7 +92,8 @@ main(int argc, char *argv[])
     return EXIT_FAILURE;
   }
 
-  mcrx_subscription_unref(sub);
+  // check I get warnings when not finishing this.
+  // mcrx_subscription_unref(sub);
   mcrx_ctx_unref(ctx);
   return EXIT_SUCCESS;
 }
