@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <inttypes.h>
 
 #include <mcrx/libmcrx.h>
 #include "./libmcrx-private.h"
@@ -265,8 +266,16 @@ MCRX_EXPORT void mcrx_ctx_set_log_fn(
       const char *fn,
       const char *format,
       va_list args)) {
-  info(ctx, "custom logging function %p registered (replaced %p)\n",
-      (void *)&log_fn, (void*)ctx->log_fn);
+  info(ctx,
+      "custom logging function %016"PRIxPTR
+      " registered (replaced %016"PRIxPTR")\n",
+      (uintptr_t)log_fn, (uintptr_t)ctx->log_fn);
+
+  // PRIxPTR from <inttypes.h> should compile everywhere, but this probably works
+  // too: . --jake 2019-06-17
+      //"custom logging function %016llx registered (replaced %016llx)\n",
+      //(unsigned long long)log_fn, (unsigned long long)ctx->log_fn);
+
   ctx->log_fn = log_fn;
 }
 
@@ -464,23 +473,6 @@ MCRX_EXPORT int mcrx_subscription_new(
   sub->ctx = ctx;
   sub->refcount = 1;
   memcpy(&sub->input, config, sizeof(*config));
-  switch (config->addr_type) {
-    case MCRX_ADDR_TYPE_DNS:
-      sub->resolved_addr_type = MCRX_ADDR_TYPE_DNS;
-      break;
-    case MCRX_ADDR_TYPE_V4:
-      sub->source_resolved = 1;
-      sub->group_resolved = 1;
-      sub->resolved_addr_type = MCRX_ADDR_TYPE_V4;
-      memcpy(&sub->resolved.v4, &config->addrs.v4, sizeof(sub->resolved.v4));
-      break;
-    case MCRX_ADDR_TYPE_V6:
-      sub->source_resolved = 1;
-      sub->group_resolved = 1;
-      sub->resolved_addr_type = MCRX_ADDR_TYPE_V6;
-      memcpy(&sub->resolved.v6, &config->addrs.v6, sizeof(sub->resolved.v6));
-      break;
-  }
 
   TAILQ_INIT(&sub->pkts_head);
   LIST_INSERT_HEAD(&ctx->subs_head, sub, sub_entries);
@@ -630,42 +622,3 @@ MCRX_EXPORT uint16_t mcrx_packet_get_contents(
   return pkt->size;
 }
 
-/**
- * mcrx_ctx_receive_packets
- * @ctx: mcrx library context
- * @timeout_mx: timeout in milliseconds.
- *
- * receive_cb calls happen only from inside this function.  Provide
- * timeout_ms = -1 to timeout never, or timeout_ms=0 to return
- * immediately even if there were no packets.
- *
- * Returns: error code on problem, EAGAIN if timeout reached
- */
-MCRX_EXPORT int mcrx_ctx_receive_packets(
-    struct mcrx_ctx *ctx,
-    int timeout_ms);
-
-/**
- * mcrx_subscription_join:
- * @sub: mcrx subscription handle
- * @receive_cb: receiver callback function
- *
- * Join the (S,G) and pass to user packets received on the given port.
- *
- * Returns: error code
- **/
-MCRX_EXPORT int mcrx_subscription_join(
-    struct mcrx_subscription* sub,
-    void (*receive_cb)(
-      struct mcrx_packet* packet));
-
-/**
- * mcrx_subscription_leave:
- * @sub: mcrx subscription handle
- *
- * Stop receiving and leave the subscription's (S,G).
- *
- * Returns: error code
- **/
-MCRX_EXPORT int mcrx_subscription_leave(
-    struct mcrx_subscription* sub);

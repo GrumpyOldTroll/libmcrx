@@ -22,6 +22,7 @@
 #define GUARD_LIBMCRX_H
 
 #include <stdarg.h>
+#include <syslog.h>
 #include <netinet/in.h>
 
 #ifdef __cplusplus
@@ -74,6 +75,7 @@ void mcrx_ctx_set_log_fn(
       const char *fn,
       const char *format,
       va_list args));
+// log priority: LOG_ERR, LOG_WARNING, LOG_INFO, or LOG_DEBUG (syslog.h)
 int mcrx_ctx_get_log_priority(
     struct mcrx_ctx *ctx);
 void mcrx_ctx_set_log_priority(
@@ -123,7 +125,7 @@ struct mcrx_subscription_addrs_v6 {
 };
 
 enum MCRX_ADDR_TYPE {
-  MCRX_ADDR_TYPE_DNS,
+  MCRX_ADDR_TYPE_UNKNOWN,
   MCRX_ADDR_TYPE_V4,
   MCRX_ADDR_TYPE_V6
 };
@@ -141,7 +143,6 @@ struct mcrx_subscription_config {
   int magic;
   enum MCRX_ADDR_TYPE addr_type;
   union {
-    struct mcrx_subscription_addrs_dns dns;
     struct mcrx_subscription_addrs_v4 v4;
     struct mcrx_subscription_addrs_v6 v6;
   } addrs;
@@ -154,6 +155,11 @@ struct mcrx_subscription_config {
   .magic = MCRX_SUBSCRIPTION_MAGIC, \
   .packet_size = 1452 \
 }
+
+int mcrx_subscription_config_pton(
+    struct mcrx_subscription_config* config,
+    const char* source,
+    const char* group);
 
 struct mcrx_subscription* mcrx_subscription_ref(
     struct mcrx_subscription* sub);
@@ -195,6 +201,22 @@ struct mcrx_subscription* mcrx_packet_get_subscription(
 uint16_t mcrx_packet_get_contents(
     struct mcrx_packet* pkt,
     uint8_t** data);
+
+#define MCRX_SUB_STRLEN (INET6_ADDRSTRLEN+2+INET6_ADDRSTRLEN+1+6)
+/**
+ * mcrx_sub_ntop:
+ * @sub: subscription
+ * @buf: buffer to write desc into
+ * @len: len of buffer (use MCRX_SUB_STRLEN to guarantee size)
+ *
+ * Write "src->grp(port)" to buf, return nonzero and set errno on error.
+ *
+ * Returns: 0 on success, nonzero on error.
+ */
+int mcrx_subscription_ntop(
+    struct mcrx_subscription* sub,
+    char* buf,
+    int buflen);
 
 #ifdef __cplusplus
 } /* extern "C" */

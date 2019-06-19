@@ -8,6 +8,7 @@ MAINTAINERCLEANFILES = Makefile.in aclocal.m4 build-aux/compile \
             m4/ltsugar.m4 m4/ltversion.m4 m4/lt~obsolete.m4
 AM_MAKEFLAGS = --no-print-directory
 
+# https://linux.die.net/man/7/feature_test_macros
 AM_CPPFLAGS = \
 	-include $(top_builddir)/config.h \
 	-DSYSCONFDIR=\""$(sysconfdir)"\" \
@@ -43,7 +44,8 @@ lib_LTLIBRARIES = src/libmcrx.la
 
 src_libmcrx_la_SOURCES =\
 	src/libmcrx-private.h \
-	src/libmcrx.c
+	src/libmcrx.c \
+	src/native.c
 
 # with thanks:
 # https://stackoverflow.com/questions/29811970/adding-linting-to-autotools-based-build-system

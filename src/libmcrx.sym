@@ -9,12 +9,14 @@ global:
         mcrx_ctx_get_log_priority;
         mcrx_ctx_set_log_priority;
         mcrx_ctx_receive_packets;
-        mcrx_subscription* mcrx_subscription_ref;
-        mcrx_subscription* mcrx_subscription_unref;
+        mcrx_subscription_ref;
+        mcrx_subscription_unref;
+        mcrx_subscription_config_pton;
         mcrx_subscription_get_userdata;
         mcrx_subscription_set_userdata;
         mcrx_subscription_get_ctx;
         mcrx_subscription_new;
+        mcrx_subscription_ntop;
         mcrx_subscription_join;
         mcrx_subscription_leave;
         mcrx_packet_ref;

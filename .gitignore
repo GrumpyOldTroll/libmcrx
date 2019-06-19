@@ -1,4 +1,6 @@
 *.o
+*.log
+*.trs
 *.lint
 .deps/
 .libs/

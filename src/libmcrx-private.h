@@ -38,7 +38,7 @@ mcrx_log_null(struct mcrx_ctx *ctx, const char *format, ...) {
 #define mcrx_log_cond(ctx, prio, ...)                                     \
   do {                                                                       \
     if (mcrx_ctx_get_log_priority(ctx) >= prio)                               \
-      mcrx_log(ctx, prio, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__); \
+      mcrx_log(ctx, prio, __FILE__, __LINE__, __func__, __VA_ARGS__); \
   } while (0)
 
 #ifdef ENABLE_LOGGING
@@ -90,13 +90,8 @@ struct mcrx_subscription {
   LIST_ENTRY(mcrx_subscription) sub_entries;
   TAILQ_HEAD(tailhead, mcrx_packet) pkts_head;
   struct mcrx_subscription_config input;
-  enum MCRX_ADDR_TYPE resolved_addr_type;
-  union {
-    struct mcrx_subscription_addrs_v4 v4;
-    struct mcrx_subscription_addrs_v6 v6;
-  } resolved;
-  unsigned int source_resolved:1;
-  unsigned int group_resolved:1;
+  int sock_fd;
+  void (*receive_cb)(struct mcrx_packet* packet);
 };
 
 /**

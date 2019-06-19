@@ -60,11 +60,16 @@ main(int argc, char *argv[])
     fprintf(stderr, "ctx_new failed\n");
     return EXIT_FAILURE;
   }
+  mcrx_ctx_set_log_priority(ctx, LOG_INFO);
 
   struct mcrx_subscription_config cfg = MCRX_SUBSCRIPTION_INIT;
-  cfg.addr_type = MCRX_ADDR_TYPE_DNS;
-  cfg.addrs.dns.source = "23.212.185.1";
-  cfg.addrs.dns.group = "232.10.10.1";
+  err = mcrx_subscription_config_pton(&cfg, "23.212.185.1", "232.10.10.1");
+  if (err != 0) {
+    fprintf(stderr, "subscription_config_pton failed\n");
+    mcrx_ctx_unref(ctx);
+    return EXIT_FAILURE;
+  }
+
   cfg.port = 5001;
 
   err = mcrx_subscription_new(ctx, &cfg, &sub);
