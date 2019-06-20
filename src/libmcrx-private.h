@@ -27,6 +27,16 @@
 
 #include <mcrx/libmcrx.h>
 
+#ifdef __APPLE__
+#define MCRX_PRV_USE_KEVENT 1
+#define MCRX_PRV_USE_EPOLL 0
+#endif
+
+#ifdef __linux__
+#define MCRX_PRV_USE_KEVENT 0
+#define MCRX_PRV_USE_EPOLL 1
+#endif
+
 #define UNUSED(x) ((void)x)
 
 static inline void __attribute__((always_inline, format(printf, 2, 3)))
@@ -73,7 +83,6 @@ struct mcrx_packet {
   int refcount;
   intptr_t userdata;
   TAILQ_ENTRY(mcrx_packet) pkt_entries;
-  // TAILQ_INSERT_TAIL(&sub->pkts_head, pkt, pkt_entries)
   uint16_t size;
   uint8_t data[];
 };
@@ -87,6 +96,7 @@ struct mcrx_subscription {
   struct mcrx_ctx *ctx;
   int refcount;
   intptr_t userdata;
+  uint16_t max_payload_size;
   LIST_ENTRY(mcrx_subscription) sub_entries;
   TAILQ_HEAD(tailhead, mcrx_packet) pkts_head;
   struct mcrx_subscription_config input;
@@ -106,6 +116,45 @@ struct mcrx_ctx {
   intptr_t userdata;
   int log_priority;
   LIST_HEAD(listhead, mcrx_subscription) subs_head;
+  int timeout_ms;
+  int wait_fd;
+  sigset_t wait_sigmask;
+  intptr_t added_handle;
+  intptr_t removed_handle;
+  int (*add_socket_cb)(
+    struct mcrx_ctx* ctx,
+    intptr_t handle,
+    int fd,
+    int (*do_receive)(intptr_t handle, int fd));
+
+  int (*remove_socket_cb)(
+    struct mcrx_ctx* ctx,
+    int fd);
+#if MCRX_PRV_USE_KEVENT
+  struct kevent* events;
+  u_int nevents;
+  struct kevent* triggered;
+  u_int ntriggered;
+  u_int nadded;
+#endif
 };
+
+int mcrx_subscription_native_join(
+    struct mcrx_subscription* sub);
+
+int mcrx_prv_add_socket_cb(
+    struct mcrx_ctx* ctx,
+    intptr_t handle,
+    int fd,
+    int (*do_receive)(intptr_t handle, int fd));
+
+int mcrx_prv_remove_socket_cb(
+    struct mcrx_ctx* ctx,
+    int fd);
+
+void wrap_strerr(
+    int err_no,
+    char* buf,
+    int len);
 
 #endif  // GUARD_LIBMCRX_PRIVATE_H_

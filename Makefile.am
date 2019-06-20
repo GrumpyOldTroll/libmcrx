@@ -45,7 +45,8 @@ lib_LTLIBRARIES = src/libmcrx.la
 src_libmcrx_la_SOURCES =\
 	src/libmcrx-private.h \
 	src/libmcrx.c \
-	src/native.c
+	src/native.c \
+	src/wait.c
 
 # with thanks:
 # https://stackoverflow.com/questions/29811970/adding-linting-to-autotools-based-build-system

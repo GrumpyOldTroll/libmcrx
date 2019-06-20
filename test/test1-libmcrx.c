@@ -29,6 +29,7 @@
 
 struct sub_info {
   int npackets;
+  int got_5;
 };
 
 static void receive_cb(struct mcrx_packet* pkt) {
@@ -40,7 +41,13 @@ static void receive_cb(struct mcrx_packet* pkt) {
   mcrx_packet_unref(pkt);
 
   if (info->npackets > 5) {
+    printf("unsubscribing\n");
     mcrx_subscription_leave(mcrx_packet_get_subscription(pkt));
+    info->got_5 = 1;
+  }
+  if (info->npackets > 100) {
+    fprintf(stderr, "did not stop at 5 packets\n");
+    exit(1);
   }
 }
 
@@ -63,7 +70,7 @@ main(int argc, char *argv[])
   mcrx_ctx_set_log_priority(ctx, LOG_INFO);
 
   struct mcrx_subscription_config cfg = MCRX_SUBSCRIPTION_INIT;
-  err = mcrx_subscription_config_pton(&cfg, "23.212.185.1", "232.10.10.1");
+  err = mcrx_subscription_config_pton(&cfg, "23.212.185.5", "232.1.1.1");
   if (err != 0) {
     fprintf(stderr, "subscription_config_pton failed\n");
     mcrx_ctx_unref(ctx);
@@ -80,8 +87,10 @@ main(int argc, char *argv[])
   }
 
   mcrx_subscription_set_userdata(sub, (intptr_t)&info);
+  mcrx_subscription_set_receive_cb(sub, receive_cb);
+  mcrx_ctx_set_wait_ms(ctx, 5000);
 
-  err = mcrx_subscription_join(sub, receive_cb);
+  err = mcrx_subscription_join(sub);
   if (err < 0) {
     fprintf(stderr, "subscription join failed\n");
     mcrx_subscription_unref(sub);
@@ -89,9 +98,12 @@ main(int argc, char *argv[])
     return EXIT_FAILURE;
   }
 
-  err = mcrx_ctx_receive_packets(ctx, -1);
-  if (err < 0) {
-    fprintf(stderr, "subscription receive failed\n");
+  do {
+    err = mcrx_ctx_receive_packets(ctx);
+  } while (!err || err == ETIMEDOUT);
+
+  if (err != EAGAIN) {
+    fprintf(stderr, "subscription receive failed: %s\n", strerror(err));
     mcrx_subscription_unref(sub);
     mcrx_ctx_unref(ctx);
     return EXIT_FAILURE;
@@ -100,5 +112,9 @@ main(int argc, char *argv[])
   // check I get warnings when not finishing this.
   // mcrx_subscription_unref(sub);
   mcrx_ctx_unref(ctx);
-  return EXIT_SUCCESS;
+  if (info.got_5) {
+    return EXIT_SUCCESS;
+  } else {
+    return EXIT_FAILURE;
+  }
 }

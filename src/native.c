@@ -31,7 +31,6 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <net/route.h>
 
 #include <mcrx/libmcrx.h>
 #include "./libmcrx-private.h"
@@ -42,7 +41,20 @@
  * https://sourceforge.net/p/predef/wiki/OperatingSystems/
  */
 
-static void wrap_strerr(int eno, char* buf, int len) {
+#ifdef __linux__
+#define USE_JOIN_STRATEGY_FILTER 0
+#define USE_JOIN_STRATEGY_ADDMEM 0
+#define USE_JOIN_STRATEGY_MCAST_JOIN 1
+#elif defined (__APPLE__)
+#define USE_JOIN_STRATEGY_FILTER 0
+#define USE_JOIN_STRATEGY_ADDMEM 1
+#define BROKEN_ADD_MEMBERSHIP_V6
+#define USE_JOIN_STRATEGY_MCAST_JOIN 0
+#else
+suffering_and_woe_join_method_undefined;
+#endif
+
+void wrap_strerr(int eno, char* buf, int len) {
 #ifdef __linux__
   const char* ret = strerror_r(eno, buf, len);
   if (ret != buf) {
@@ -56,38 +68,24 @@ static void wrap_strerr(int eno, char* buf, int len) {
   }
 #else
   // strerror_r is kind of a debacle, and wouldn't switch to
-  // the XSI version with a -D_BSD_SOURCE as advertised:
+  // the XSI version with a -D_BSD_SOURCE in linux as advertised:
   // http://man7.org/linux/man-pages/man3/strerror_r.3.html
   // http://man7.org/linux/man-pages/man7/feature_test_macros.7.html
   // --jake 2019-06-17
   UNUSED(eno);
   UNUSED(buf);
   UNUSED(len);
-  suffering_and_woe;
+  suffering_and_woe_strerror_unselected;
 #endif
 }
 
-/**
- * mcrx_ctx_receive_packets
- * @ctx: mcrx library context
- * @timeout_mx: timeout in milliseconds.
- *
- * receive_cb calls happen only from inside this function.  Provide
- * timeout_ms = -1 to timeout never, or timeout_ms=0 to return
- * immediately even if there were no packets.
- *
- * Returns: error code on problem, EAGAIN if timeout reached
- */
-MCRX_EXPORT int mcrx_ctx_receive_packets(
+MCRX_EXPORT void mcrx_ctx_set_wait_ms(
     struct mcrx_ctx *ctx,
     int timeout_ms) {
-  UNUSED(ctx);
-  UNUSED(timeout_ms);
-  usleep(10000000);
-  return -ENOTSUP;
+  ctx->timeout_ms = timeout_ms;
 }
 
-int mcrx_subscription_ntop(
+MCRX_EXPORT int mcrx_subscription_ntop(
     struct mcrx_subscription* sub,
     char* buf,
     int buflen) {
@@ -524,19 +522,67 @@ static int mcrx_find_interface(
   return 0;
 }
 
-/**
- * mcrx_subscription_join:
- * @sub: mcrx subscription handle
- * @receive_cb: receiver callback function
- *
- * Join the (S,G) and pass to user packets received on the given port.
- *
- * Returns: error code
- **/
-MCRX_EXPORT int mcrx_subscription_join(
-    struct mcrx_subscription* sub,
-    void (*receive_cb)(
-      struct mcrx_packet* packet)) {
+static int native_receive(
+    intptr_t sub_handle,
+    int fd) {
+  struct mcrx_subscription* sub = (struct mcrx_subscription*)sub_handle;
+  struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
+  info(ctx, "receiving on %d\n", fd);
+
+  int rc;
+  mcrx_subscription_ref(sub);
+  do {
+    struct mcrx_packet *pkt = (struct mcrx_packet*)calloc(1,
+        sizeof(struct mcrx_packet)+sub->max_payload_size);
+    if (!pkt) {
+      errno = ENOMEM;
+      mcrx_subscription_unref(sub);
+      return -1;
+    }
+
+    struct iovec iov;
+    bzero(&iov, sizeof(iov));
+    iov.iov_base = &pkt->data;
+    iov.iov_len = sub->max_payload_size;
+    struct msghdr hdr;
+    bzero(&hdr, sizeof(hdr));
+    hdr.msg_iov = &iov;
+    hdr.msg_iovlen = 1;
+
+    rc = recvmsg(fd, &hdr, MSG_TRUNC | MSG_DONTWAIT);
+    if (rc < 0) {
+      switch (errno) {
+        case EINTR:
+        case EAGAIN:
+        // case EWOULDBLOCK:  (duplicate case value, EAGAIN is the same)
+          free(pkt);
+          mcrx_subscription_unref(sub);
+          return 0;
+        default:
+          free(pkt);
+          mcrx_subscription_unref(sub);
+          return -1;
+      }
+    }
+    pkt->sub = sub;
+    pkt->refcount = 1;
+    if (rc > sub->max_payload_size) {
+      // expect hdr.flags & MSG_TRUNC here.
+      pkt->size = sub->max_payload_size;
+    } else {
+      pkt->size = rc;
+    }
+    TAILQ_INSERT_TAIL(&sub->pkts_head, pkt, pkt_entries);
+
+    sub->receive_cb(pkt);
+  } while (1);
+
+  mcrx_subscription_unref(sub);
+  return 0;
+}
+
+int mcrx_subscription_native_join(
+    struct mcrx_subscription* sub) {
   struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
   if (sub == NULL || ctx == NULL) {
     err(ctx, "NULL sub(%p) or ctx(%p)\n", (void*)sub, (void*)ctx);
@@ -620,31 +666,45 @@ MCRX_EXPORT int mcrx_subscription_join(
    * choices for group management:
    *
    * 1.
-   * IP_ADD_MEMBERSHIP/IP_DROP_MEMBERSHIP
    * IP_ADD_SOURCE_MEMBERSHIP/IP_DROP_SOURCE_MEMBERSHIP
-   * IPV6_ADD_MEMBERSHIP/IPV6_DROP_MEMBERSHIP
+   * http://man7.org/linux/man-pages/man7/ipv6.7.html
+   * http://man7.org/linux/man-pages/man7/ip.7.html
+   * (asm: IP_ADD_MEMBERSHIP/IP_DROP_MEMBERSHIP)
+   * (asm: IPV6_ADD_MEMBERSHIP/IPV6_DROP_MEMBERSHIP)
    * - incredibly, there's no IPV6_ADD_SOURCE_MEMBERSHIP in linux
-   * - mac has no IPV6_ADD_anything
+   * - mac has no IPV6_ADD_MEMBERSHIP
    *
    * 2.
-   * MCAST_JOIN_GROUP/MCAST_LEAVE_GROUP
    * MCAST_JOIN_SOURCE_GROUP/MCAST_LEAVE_SOURCE_GROUP
+   * https://tools.ietf.org/html/rfc3678#section-5.1.2
+   * (asm: MCAST_JOIN_GROUP/MCAST_LEAVE_GROUP)
    * - compiles, but not functional on mac
    *
    * 3.
    * MCAST_MSFILTER
-   * - ok except for being needlessly complicated.  supports ipv4 and v6
-   * - IP_MSFILTER is similar but IP4-only, where MCAST_MSFILTER is either
-   * - mac has IP_MSFILTER but not MCAST_MSFILTER
-   * - freebsd has IPV6_MSFILTER
+   * - probably the underlying mechanism for setsourcefilter, where
+   *   setsourcefilter is implemented.  Basically the same content.
+   * - freebsd has IPV6_MSFILTER and IP_MSFILTER.  They look the same?
+   * - IP_MSFILTER is similar but IP4-only, where MCAST_MSFILTER is v4 or v6
+   * - mac has IPV6_MSFILTER in netinet6/in6.h, but with a comment saying
+   *   "The following option is private; do not use it from user applications.",
+   *   and it doesn't compile.  IP_MSFILTER appears not to work.
    *
-   * 4. setsourcefilter  (https://tools.ietf.org/html/rfc3678#section-5.2.1)
+   * 4.
+   * SIOCSMSFILTER
+   * https://tools.ietf.org/html/rfc3678#section-8.2
+   * - appears not to be present in linux or mac
+   *
+   * 5. setsourcefilter  (https://tools.ietf.org/html/rfc3678#section-5.2.1)
    * - there in mac, bsd, and linux? (in linux, not in kernel's netinet/in.h,
    *   but it's there in userspace, presumably using MCAST_MSFILTER underneath)
    * - however, everything I try on mac or linux always gives "Invalid argument".
    *   Not sure if the socket or the interface index or the filter or one of the
    *   sockbufs is the issue.  TBD: maybe debug this in-kernel to find out?
    *   --jake 2019-06-17
+   *
+   * mac comments are regarding MacOSX10.12.sdk
+   * linux comments are regarding 4.15.0-48-generic
    */
 
   switch (sub->input.addr_type) {
@@ -664,6 +724,8 @@ MCRX_EXPORT int mcrx_subscription_join(
       sin4_source->sin_len = sizeof(struct sockaddr_in);
 #endif
 
+      // does it help rx to listen on any?
+      // bzero(&sin4_group.sin_addr, sizeof(struct in_addr));
       rc = bind(sock_fd, (struct sockaddr*)(&sin4_group),
           sizeof(struct sockaddr_in));
       if (rc < 0) {
@@ -674,7 +736,7 @@ MCRX_EXPORT int mcrx_subscription_join(
         return -EBADF;
       }
 
-#if 0
+#if USE_JOIN_STRATEGY_FILTER
       rc = setsourcefilter(sock_fd, if_idx, (struct sockaddr*)&sin4_group,
           sizeof(struct sockaddr_in), MCAST_INCLUDE, 1, &sinss_source);
       if (rc < 0) {
@@ -685,7 +747,7 @@ MCRX_EXPORT int mcrx_subscription_join(
         close(sock_fd);
         return -EBADF;
       }
-#elif defined(__APPLE__)
+#elif USE_JOIN_STRATEGY_ADDMEM
       struct ip_mreq_source mreq;
       memset(&mreq, 0, sizeof(mreq));
       mreq.imr_multiaddr = sub->input.addrs.v4.group;
@@ -703,8 +765,32 @@ MCRX_EXPORT int mcrx_subscription_join(
         close(sock_fd);
         return -EBADF;
       }
-#else
-      woe_and_sorrow_joining_undefined;
+#elif USE_JOIN_STRATEGY_MCAST_JOIN
+      struct group_source_req gsreq;
+      bzero(&gsreq, sizeof(gsreq));
+      gsreq.gsr_interface = if_idx;
+      struct sockaddr_in* gsr_src = (struct sockaddr_in*)&gsreq.gsr_source;
+      struct sockaddr_in* gsr_grp = (struct sockaddr_in*)&gsreq.gsr_group;
+      gsr_src->sin_family = AF_INET;
+      gsr_src->sin_addr = sub->input.addrs.v4.source;
+      gsr_grp->sin_family = AF_INET;
+      gsr_grp->sin_addr = sub->input.addrs.v4.group;
+#if BSD
+      gsr_src->sin_len = sizeof(*gsr_src);
+      gsr_grp->sin_len = sizeof(*gsr_grp);
+#endif
+      rc = setsockopt(sock_fd, AF_INET, MCAST_JOIN_SOURCE_GROUP, &gsreq,
+          sizeof(gsreq));
+      if (rc < 0) {
+        char buf[1024];
+        wrap_strerr(errno, buf, sizeof(buf));
+        err(ctx,
+            "sub %p (%s) setsockopt(MCAST_JOIN_SOURCE_GROUP) failed: %s\n",
+            (void*)sub,
+            desc, buf);
+        close(sock_fd);
+        return -EBADF;
+      }
 #endif
       break;
     }
@@ -732,6 +818,7 @@ MCRX_EXPORT int mcrx_subscription_join(
         return -EBADF;
       }
 
+#if USE_JOIN_STRATEGY_FILTER
       rc = setsourcefilter(sock_fd, if_idx, (struct sockaddr*)&sin6_group,
           sizeof(struct sockaddr_in6), MCAST_INCLUDE, 1, &sinss_source);
       if (rc < 0) {
@@ -742,6 +829,56 @@ MCRX_EXPORT int mcrx_subscription_join(
         close(sock_fd);
         return -EBADF;
       }
+#elif USE_JOIN_STRATEGY_ADDMEM
+  #ifndef BROKEN_ADD_MEMBERSHIP_V6
+      // support for this seems present in freebsd but nowhere else?
+      struct ipv6_mreq_source mreq;
+      memset(&mreq, 0, sizeof(mreq));
+      mreq.ipv6mr_multiaddr = sub->input.addrs.v6.group;
+      mreq.ipv6mr_sourceaddr = sub->input.addrs.v6.source;
+      mreq.ipv6mr_interface = if_idx;
+      rc = setsockopt(sock_fd, IPPROTO_IP, IPV6_ADD_SOURCE_MEMBERSHIP,
+          &mreq, sizeof(mreq));
+      if (rc < 0) {
+        char buf[1024];
+        wrap_strerr(errno, buf, sizeof(buf));
+        err(ctx,
+            "sub %p (%s) setsockopt(IP_ADD_SOURCE_MEMBERSHIP) failed: %s\n",
+            (void*)sub, desc, buf);
+        close(sock_fd);
+        return -EBADF;
+      }
+  #else
+      err(ctx, "sub %p (%s) unimplemented join(s,g)\n", (void*)sub, desc);
+      close(sock_fd);
+      return -ENOTSUP;
+  #endif
+#elif USE_JOIN_STRATEGY_MCAST_JOIN
+      struct group_source_req gsreq;
+      bzero(&gsreq, sizeof(gsreq));
+      gsreq.gsr_interface = if_idx;
+      struct sockaddr_in6* gsr_src = (struct sockaddr_in6*)&gsreq.gsr_source;
+      struct sockaddr_in6* gsr_grp = (struct sockaddr_in6*)&gsreq.gsr_group;
+      gsr_src->sin6_family = AF_INET6;
+      gsr_src->sin6_addr = sub->input.addrs.v6.source;
+      gsr_grp->sin6_family = AF_INET6;
+      gsr_grp->sin6_addr = sub->input.addrs.v6.group;
+#if BSD
+      gsr_src->sin6_len = sizeof(*gsr_src);
+      gsr_grp->sin6_len = sizeof(*gsr_grp);
+#endif
+      rc = setsockopt(sock_fd, AF_INET6, MCAST_JOIN_SOURCE_GROUP, &gsreq,
+          sizeof(gsreq));
+      if (rc < 0) {
+        char buf[1024];
+        wrap_strerr(errno, buf, sizeof(buf));
+        err(ctx,
+            "sub %p (%s) setsockopt(MCAST_JOIN_SOURCE_GROUP) failed: %s\n",
+            (void*)sub, desc, buf);
+        close(sock_fd);
+        return -EBADF;
+      }
+#endif
       break;
     }
     default:
@@ -783,7 +920,22 @@ MCRX_EXPORT int mcrx_subscription_join(
     return -EBADF;
   }
 
-  sub->receive_cb = receive_cb;
+  if (!ctx->add_socket_cb) {
+    err(ctx, "sub %p (%s) no add_socket_cb\n", (void*)sub, desc);
+    return -EINVAL;
+  }
+
+  info(ctx, "calling add_socket_cb\n");
+  rc = ctx->add_socket_cb(ctx, (intptr_t)sub, sock_fd, native_receive);
+  if (rc < 0) {
+    char buf[1024];
+    wrap_strerr(errno, buf, sizeof(buf));
+    err(ctx, "sub %p (%s) add_fd() failed: %s\n", (void*)sub, desc, buf);
+    close(sock_fd);
+    return -EBADF;
+  }
+
+  sub->sock_fd = sock_fd;
 
   return 0;
 }

@@ -177,6 +177,9 @@ MCRX_EXPORT int mcrx_ctx_new(
     mcrx_ctx_set_log_priority(c, prio);
   }
   LIST_INIT(&c->subs_head);
+  c->timeout_ms = 1000 + random() % 1000;
+  c->add_socket_cb = mcrx_prv_add_socket_cb;
+  c->remove_socket_cb = mcrx_prv_remove_socket_cb;
 
   info(c, "version %s context %p created\n", VERSION, (void *)c);
   dbg(c, "log_priority=%d\n", c->log_priority);
@@ -241,6 +244,11 @@ MCRX_EXPORT struct mcrx_ctx *mcrx_ctx_unref(
         nsubs, (void*)ctx);
   }
 
+  if (ctx->wait_fd) {
+    close(ctx->wait_fd);
+    ctx->wait_fd = 0;
+  }
+
   info(ctx, "context %p released\n", (void *)ctx);
   free(ctx);
   return NULL;
@@ -271,10 +279,10 @@ MCRX_EXPORT void mcrx_ctx_set_log_fn(
       " registered (replaced %016"PRIxPTR")\n",
       (uintptr_t)log_fn, (uintptr_t)ctx->log_fn);
 
-  // PRIxPTR from <inttypes.h> should compile everywhere, but this probably works
-  // too: . --jake 2019-06-17
-      //"custom logging function %016llx registered (replaced %016llx)\n",
-      //(unsigned long long)log_fn, (unsigned long long)ctx->log_fn);
+  // PRIxPTR from <inttypes.h> should compile everywhere, but this
+  // probably works too, if it has trouble: --jake 2019-06-17
+  // "custom logging function %016llx registered (replaced %016llx)\n",
+  // (unsigned long long)log_fn, (unsigned long long)ctx->log_fn);
 
   ctx->log_fn = log_fn;
 }
@@ -441,6 +449,13 @@ MCRX_EXPORT struct mcrx_ctx* mcrx_subscription_get_ctx(
   return sub->ctx;
 }
 
+static void default_receive_cb(
+    struct mcrx_packet* pkt) {
+  struct mcrx_subscription* sub = mcrx_packet_get_subscription(pkt);
+  struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
+  warn(ctx, "sub %p no receive callback set for pkt\n", (void*)sub);
+}
+
 /**
  * mcrx_subscription_new:
  * @ctx: mcrx library context
@@ -472,6 +487,16 @@ MCRX_EXPORT int mcrx_subscription_new(
 
   sub->ctx = ctx;
   sub->refcount = 1;
+  sub->receive_cb = default_receive_cb;
+  
+  // default assume 1500 ethernet, minus:
+  // ip  (20 v4 or 40 v6, according to amt)
+  // udp (8)
+  // amt (2)
+  // ip  (20 v4 or 40 v6, according to sub)
+  // udp (8)
+  // 118 v6 sub or 98 v4 sub
+  sub->max_payload_size = 1382;
   memcpy(&sub->input, config, sizeof(*config));
 
   TAILQ_INIT(&sub->pkts_head);
@@ -479,6 +504,48 @@ MCRX_EXPORT int mcrx_subscription_new(
   info(ctx, "subscription %p created\n", (void *)sub);
   *subp = sub;
   return 0;
+}
+
+int mcrx_subscription_set_max_payload(
+    struct mcrx_subscription* sub,
+    uint16_t payload_size) {
+  sub->max_payload_size = payload_size;
+  return 0;
+}
+
+/**
+ * mcrx_subscription_set_receive_cb:
+ * @sub: mcrx subscription handle
+ * @receive_cb: receiver callback function
+ *
+ * Join the (S,G) and pass to user packets received on the given port.
+ *
+ * Returns: 0 on success -1 and set errno on failure
+ **/
+MCRX_EXPORT int mcrx_subscription_set_receive_cb(
+    struct mcrx_subscription* sub,
+    void (*receive_cb)(
+      struct mcrx_packet* packet)) {
+  if (!receive_cb) {
+    sub->receive_cb = default_receive_cb;
+  } else {
+    sub->receive_cb = receive_cb;
+  }
+  return 0;
+}
+
+/**
+ * mcrx_subscription_join:
+ * @sub: mcrx subscription handle
+ * @receive_cb: receiver callback function
+ *
+ * Join the (S,G) and pass to user packets received on the given port.
+ *
+ * Returns: error code
+ **/
+MCRX_EXPORT int mcrx_subscription_join(
+    struct mcrx_subscription* sub) {
+  return mcrx_subscription_native_join(sub);
 }
 
 /**

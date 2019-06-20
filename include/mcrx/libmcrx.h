@@ -81,20 +81,13 @@ int mcrx_ctx_get_log_priority(
 void mcrx_ctx_set_log_priority(
     struct mcrx_ctx *ctx,
     int priority);
-int mcrx_ctx_receive_packets(
+// Default value is 1000+random()%1000
+// like epoll, 0 means don't block, -1 means infinity
+void mcrx_ctx_set_wait_ms(
     struct mcrx_ctx *ctx,
     int timeout_ms);
-
-/*
- * mcrx_subscription
- *
- * a subscription handle.  joins and leaves groups, tracks statistics,
- * fires callbacks as packets are received.
- */
-struct mcrx_subscription_addrs_dns {
-  const char* source;
-  const char* group;
-};
+int mcrx_ctx_receive_packets(
+    struct mcrx_ctx *ctx);
 
 /*
  * mcrx_subscription_addrs_v4
@@ -178,10 +171,16 @@ int mcrx_subscription_new(
     const struct mcrx_subscription_config* config,
     struct mcrx_subscription** subp);
 
-int mcrx_subscription_join(
+int mcrx_subscription_set_receive_cb(
     struct mcrx_subscription* sub,
     void (*receive_cb)(
       struct mcrx_packet* packet));
+
+int mcrx_subscription_set_max_payload(
+    struct mcrx_subscription* sub,
+    uint16_t payload_size);
+int mcrx_subscription_join(
+    struct mcrx_subscription* sub);
 int mcrx_subscription_leave(
     struct mcrx_subscription* sub);
 
@@ -204,7 +203,7 @@ uint16_t mcrx_packet_get_contents(
 
 #define MCRX_SUB_STRLEN (INET6_ADDRSTRLEN+2+INET6_ADDRSTRLEN+1+6)
 /**
- * mcrx_sub_ntop:
+ * mcrx_subscription_ntop:
  * @sub: subscription
  * @buf: buffer to write desc into
  * @len: len of buffer (use MCRX_SUB_STRLEN to guarantee size)
