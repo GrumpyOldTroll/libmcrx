@@ -39,10 +39,11 @@ static void receive_cb(struct mcrx_packet* pkt) {
   struct sub_info* info = (struct sub_info*)mcrx_subscription_get_userdata(sub);
   info->npackets += 1;
   mcrx_packet_unref(pkt);
+  pkt = NULL;
 
   if (info->npackets > 5) {
     printf("unsubscribing\n");
-    mcrx_subscription_leave(mcrx_packet_get_subscription(pkt));
+    mcrx_subscription_leave(sub);
     info->got_5 = 1;
   }
   if (info->npackets > 100) {

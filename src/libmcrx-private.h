@@ -137,6 +137,12 @@ struct mcrx_ctx {
   u_int ntriggered;
   u_int nadded;
 #endif
+#if MCRX_PRV_USE_EPOLL
+  struct epoll_event *events;
+  u_int nevents;
+  struct epoll_event* triggered;
+  u_int ntriggered;
+#endif
 };
 
 int mcrx_subscription_native_join(

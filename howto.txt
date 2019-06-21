@@ -1,0 +1,21 @@
+
+running on mac
+- with a virtualbox vm with a host-only interface plust a nat interface
+  - on host: vboxnet0, 192.168.56.1
+  - on guest: enp0s8, 192.168.56.2
+
+on guest:
+- make a macvlan network linking container to the host-only adapter:
+  docker network create --driver macvlan --subnet=192.168.56.0/24 --ip-range=192.168.56.0/26 --gateway=192.168.56.1 -o parent=enp0s8 xamtbr0
+- run amtgw connecting with that network for data:
+  AMTRELAY_IP=18.144.22.247
+  docker create --rm --name amtgw --privileged grumpyoldtroll/amtgw $AMTRELAY_IP && \
+  docker network connect macnet56 amtgw && \
+  docker start amtgw
+
+on host:
+- add a route to the source, headed toward the vm:
+  sudo route add -net 23.212.185.0/24 192.168.56.2
+- now joins should join there.
+
+

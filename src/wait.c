@@ -18,15 +18,14 @@
 #include <ctype.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+#include <inttypes.h>
 #include <sys/types.h>
 #include <sys/time.h>
 
 #include <mcrx/libmcrx.h>
 #include "./libmcrx-private.h"
-
-#if MCRX_PRV_USE_KEVENT
-#include <sys/event.h>
 
 struct mcrx_fd_handle {
   int magic;
@@ -36,6 +35,9 @@ struct mcrx_fd_handle {
   int (*handle_cb)(intptr_t handle, int fd);
 };
 #define MCRX_FD_HANDLE_MAGIC 0x74
+
+#if MCRX_PRV_USE_KEVENT
+#include <sys/event.h>
 
 /**
  * mcrx_ctx_receive_packets
@@ -137,7 +139,7 @@ MCRX_EXPORT int mcrx_ctx_receive_packets(
   }
 
   if (nevents == 0) {
-    info(ctx, "no events fired, timed out %d\n", ctx->timeout_ms);
+    dbg(ctx, "no events fired--timed out? %d\n", ctx->timeout_ms);
     return ETIMEDOUT;
   }
 
@@ -273,11 +275,6 @@ int mcrx_prv_remove_socket_cb(
     struct kevent* evt;
     evt = &ctx->events[idx];
     if (evt->filter == EVFILT_READ && evt->ident == (uintptr_t)fd) {
-      if (ctx->nevents < 1) {
-        err(ctx, "internal error: nevents under 1 when removing a match\n");
-        errno = EINVAL;
-        return -1;
-      }
       struct mcrx_fd_handle *old_cb = (struct mcrx_fd_handle*)evt->udata;
       if (!old_cb) {
         err(ctx, "internal error: no udata set on event for %d\n", fd);
@@ -318,7 +315,9 @@ int mcrx_prv_remove_socket_cb(
     }
   }
 
-  return 0;
+  err(ctx, "internal error: did not find fd to remove\n");
+  errno = EBADF;
+  return -1;
 }
 
 #endif  // MCRX_PRV_USE_KEVENT
@@ -328,7 +327,30 @@ int mcrx_prv_remove_socket_cb(
 
 MCRX_EXPORT int mcrx_ctx_receive_packets(
     struct mcrx_ctx *ctx) {
+  if (ctx->nevents == 0) {
+    if (ctx->triggered != NULL) {
+      free(ctx->triggered);
+      ctx->triggered = NULL;
+      ctx->ntriggered = 0;
+      if (ctx->wait_fd) {
+        close(ctx->wait_fd);
+        ctx->wait_fd = 0;
+      }
+    } else {
+      warn(ctx, "waiting again for packets with no listeners\n");
+      if (ctx->timeout_ms > 0) {
+        usleep(1000*ctx->timeout_ms);
+      } else {
+        // much friendlier to other threads when there's a bug...
+        usleep(1000);
+      }
+    }
+    return EAGAIN;
+  }
   if (ctx->wait_fd == 0) {
+    err(ctx, "no wait_fd ctx %p on entry to receive_packets\n", (void*)ctx);
+    // shouldn't ever get here.  should make this fatal?
+    // --jake 2019-06-21
     int fd = epoll_create1(EPOLL_CLOEXEC);
     if (fd <= 0) {
       char buf[1024];
@@ -337,12 +359,85 @@ MCRX_EXPORT int mcrx_ctx_receive_packets(
       return -1;
     }
     ctx->wait_fd = fd;
+    u_int idx;
+    for (idx = 0; idx < ctx->nevents; idx++) {
+      struct epoll_event* evt = &ctx->events[idx];
+      struct mcrx_fd_handle* cur_cb = (struct mcrx_fd_handle*)evt->data.ptr;
+      int rc = epoll_ctl(ctx->wait_fd, EPOLL_CTL_ADD, cur_cb->fd, evt);
+      if (rc < 0) {
+        char buf[1024];
+        wrap_strerr(errno, buf, sizeof(buf));
+        err(ctx, "failed epoll_ctl(ADD): %s\n", buf);
+        return -1;
+      }
+    }
   }
-  if (ctx->wait_sigmask) {
-    //  epoll_pwait(ctx->wait_fd, ctx->
-  } else {
-    //  epoll_wait(ctx->wait_fd,
+  if (ctx->nevents != ctx->ntriggered) {
+    if (ctx->triggered == NULL) {
+      ctx->triggered = (struct epoll_event*)calloc(ctx->nevents,
+          sizeof(struct epoll_event));
+      if (!ctx->triggered) {
+        errno = ENOMEM;
+        err(ctx, "failed to alloc %d events\n", ctx->nevents);
+        return ENOMEM;
+      }
+      ctx->ntriggered = ctx->nevents;
+    } else {
+      struct epoll_event* new_triggers = (struct epoll_event*)
+        realloc(ctx->triggered, sizeof(struct epoll_event)*ctx->nevents);
+      if (!new_triggers) {
+        warn(ctx, "failed to realloc %d events from %d\n", ctx->nevents,
+            ctx->ntriggered);
+      } else {
+        ctx->ntriggered = ctx->nevents;
+        ctx->triggered = new_triggers;
+      }
+    }
   }
+
+  int nevents = epoll_wait(ctx->wait_fd, ctx->triggered, ctx->ntriggered,
+      ctx->timeout_ms);
+  dbg(ctx, "%d events from %u changes, %u trigger space\n",
+      nevents, ctx->nevents, ctx->ntriggered);
+
+  if (nevents < 0) {
+    char buf[1024];
+    wrap_strerr(errno, buf, sizeof(buf));
+    err(ctx, "failed epoll_wait: %s\n", buf);
+    return errno;
+  }
+
+  if (nevents == 0) {
+    dbg(ctx, "no events fired--timed out? %d\n", ctx->timeout_ms);
+    return ETIMEDOUT;
+  }
+
+  // keep ctx alive regardless of what happens during callbacks.
+  mcrx_ctx_ref(ctx);
+  u_int idx;
+  for (idx = 0; idx < (u_int)nevents; ++idx) {
+    struct epoll_event* evt = &ctx->triggered[idx];
+    struct mcrx_fd_handle* handle = (struct mcrx_fd_handle*)evt->data.ptr;
+    if (!handle) {
+      err(ctx, "event with no handle (%u)\n", (unsigned int)idx);
+      continue;
+    }
+    if (handle->magic != MCRX_FD_HANDLE_MAGIC) {
+      err(ctx, "event with improper handle (%u)\n", (unsigned int)idx);
+      continue;
+    }
+    if (handle->ctx != ctx) {
+      err(ctx, "event handle ctx mismatch (%p != %p)\n", (void*)handle->ctx,
+          (void*)ctx);
+      continue;
+    }
+    dbg(ctx, "receive_cb handle=%"PRIxPTR"x fd=%d cb=%p\n",
+        handle->handle, handle->fd, (void*)handle);
+    handle->handle_cb(handle->handle, handle->fd);
+  }
+  mcrx_ctx_unref(ctx);
+
+  return 0;
 }
 
 int mcrx_prv_add_socket_cb(
@@ -350,21 +445,139 @@ int mcrx_prv_add_socket_cb(
     intptr_t handle,
     int fd,
     int (*handle_cb)(intptr_t handle, int fd)) {
+  if (!ctx) {
+    errno = EINVAL;
+    err(ctx, "add_socket_cb with no ctx\n");
+    return -1;
+  }
+  if (!handle_cb) {
+    errno = EINVAL;
+    err(ctx, "add_socket_cb with no callback\n");
+    return -1;
+  }
+  if (fd <= 0) {
+    errno = EINVAL;
+    err(ctx, "add_socket_cb with bad fd (%d)\n", fd);
+    return -1;
+  }
   if (ctx->wait_fd == 0) {
-    return ENOTSUP;
+    int wait_fd = epoll_create1(EPOLL_CLOEXEC);
+    if (wait_fd <= 0) {
+      char buf[1024];
+      wrap_strerr(errno, buf, sizeof(buf));
+      err(ctx, "failed epoll_create1: %s\n", buf);
+      return -1;
+    }
+    ctx->wait_fd = wait_fd;
   }
 
-  return ENOTSUP;
+  struct mcrx_fd_handle* new_cb = (struct mcrx_fd_handle*)calloc(1,
+      sizeof(struct mcrx_fd_handle));
+  if (new_cb == NULL) {
+    errno = ENOMEM;
+    err(ctx, "failed to alloc fd handle, oom\n");
+    return -1;
+  }
+  new_cb->magic = MCRX_FD_HANDLE_MAGIC;
+  new_cb->ctx = ctx;
+  new_cb->fd = fd;
+  new_cb->handle = handle;
+  new_cb->handle_cb = handle_cb;
+  dbg(ctx, "add_socket_cb handle=%"PRIxPTR"x fd=%d cb=%p\n",
+      handle, fd, (void*)new_cb);
+
+  if (ctx->events == NULL) {
+    ctx->events = (struct epoll_event*)calloc(1,
+        sizeof(struct epoll_event));
+    if (!ctx->events) {
+      errno = ENOMEM;
+      err(ctx, "failed to alloc space for new fd handle, oom\n");
+      free(new_cb);
+      return -1;
+    }
+  } else {
+    struct epoll_event *new_holders = (struct epoll_event*)realloc(
+        ctx->events, sizeof(struct epoll_event)*(ctx->nevents+1));
+    if (!new_holders) {
+      errno = ENOMEM;
+      err(ctx, "failed to realloc space for new fd handle, oom\n");
+      free(new_cb);
+      return -1;
+    }
+    ctx->events = new_holders;
+  }
+  memset(&ctx->events[ctx->nevents], 0, sizeof(struct epoll_event));
+  ctx->events[ctx->nevents].data.ptr = new_cb;
+  ctx->events[ctx->nevents].events = EPOLLIN;
+
+  int rc = epoll_ctl(ctx->wait_fd, EPOLL_CTL_ADD, fd,
+      &ctx->events[ctx->nevents]);
+  if (rc < 0) {
+    char buf[1024];
+    wrap_strerr(errno, buf, sizeof(buf));
+    err(ctx, "failed epoll_ctl(ADD): %s\n", buf);
+    free(new_cb);
+    return -1;
+  }
+  ctx->nevents += 1;
+
+  return 0;
 }
 
 int mcrx_prv_remove_socket_cb(
     struct mcrx_ctx* ctx,
     int fd) {
-  if (ctx->wait_fd == 0) {
-    return ENOTSUP;
+  if (!ctx) {
+    errno = EINVAL;
+    err(ctx, "remove_socket_cb with no ctx\n");
+    return -1;
+  }
+  if (fd <= 0) {
+    errno = EINVAL;
+    err(ctx, "remove_socket_cb with bad fd (%d)\n", fd);
+    return -1;
   }
 
-  return ENOTSUP;
+  u_int idx;
+  for (idx = 0; idx < ctx->nevents; idx++) {
+    struct epoll_event* evt;
+    evt = &ctx->events[idx];
+    struct mcrx_fd_handle* cur_cb = (struct mcrx_fd_handle*)evt->data.ptr;
+    if (cur_cb->ctx != ctx) {
+      err(ctx, "internal error: wrong ctx on %d\n", fd);
+    }
+    dbg(ctx, "remove_socket_cb handle=%"PRIxPTR"x fd=%d cb=%p\n",
+        cur_cb->handle, fd, (void*)cur_cb);
+    ctx->nevents -= 1;
+    if (ctx->wait_fd) {
+      int rc = epoll_ctl(ctx->wait_fd, EPOLL_CTL_DEL, fd, evt);
+      if (rc < 0) {
+        char buf[1024];
+        wrap_strerr(errno, buf, sizeof(buf));
+        err(ctx, "failed epoll_ctl(DEL): %s\n", buf);
+      }
+    }
+    if (idx < ctx->nevents) {
+      memmove(&ctx->events[idx], &ctx->events[idx+1],
+          (ctx->nevents-idx)*sizeof(struct epoll_event));
+    }
+    if (ctx->nevents == 0) {
+      free(ctx->events);
+      ctx->events = 0;
+      close(ctx->wait_fd);
+      ctx->wait_fd = 0;
+    } else {
+      ctx->events = (struct epoll_event*)realloc(ctx->events,
+          sizeof(struct epoll_event)*ctx->nevents);
+    }
+
+    free(cur_cb);
+    return 0;
+  }
+
+  err(ctx, "internal error: did not find fd to remove\n");
+  errno = EBADF;
+  return -1;
 }
 
 #endif  // MCRX_PRV_USE_EPOLL

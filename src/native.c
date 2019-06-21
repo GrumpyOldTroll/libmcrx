@@ -527,7 +527,7 @@ static int native_receive(
     int fd) {
   struct mcrx_subscription* sub = (struct mcrx_subscription*)sub_handle;
   struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
-  info(ctx, "receiving on %d\n", fd);
+  dbg(ctx, "receiving on %d\n", fd);
 
   int rc;
   // keep subscription and ctx alive through callbacks even if unrefd.
@@ -785,7 +785,7 @@ int mcrx_subscription_native_join(
       gsr_src->sin_len = sizeof(*gsr_src);
       gsr_grp->sin_len = sizeof(*gsr_grp);
 #endif
-      rc = setsockopt(sock_fd, AF_INET, MCAST_JOIN_SOURCE_GROUP, &gsreq,
+      rc = setsockopt(sock_fd, IPPROTO_IP, MCAST_JOIN_SOURCE_GROUP, &gsreq,
           sizeof(gsreq));
       if (rc < 0) {
         char buf[1024];
@@ -873,7 +873,7 @@ int mcrx_subscription_native_join(
       gsr_src->sin6_len = sizeof(*gsr_src);
       gsr_grp->sin6_len = sizeof(*gsr_grp);
 #endif
-      rc = setsockopt(sock_fd, AF_INET6, MCAST_JOIN_SOURCE_GROUP, &gsreq,
+      rc = setsockopt(sock_fd, IPPROTO_IPV6, MCAST_JOIN_SOURCE_GROUP, &gsreq,
           sizeof(gsreq));
       if (rc < 0) {
         char buf[1024];
@@ -948,9 +948,7 @@ int mcrx_subscription_native_join(
     mcrx_ctx_unref(ctx);
     return -EBADF;
   }
-  // keep subscription alive while held externally, do not unref here.
-  // (corresponding unref is in leave)
-  // mcrx_subscription_unref(sub);
+  mcrx_subscription_unref(sub);
   mcrx_ctx_unref(ctx);
 
   return 0;
@@ -990,11 +988,9 @@ MCRX_EXPORT int mcrx_subscription_leave(
     return -EINVAL;
   }
   // keep ctx alive if callback unrefs
-  // subscription is ref'd already, held since the add_socket_cb.
   mcrx_ctx_ref(ctx);
+  mcrx_subscription_ref(sub);
   ctx->remove_socket_cb(ctx, sub->sock_fd);
-  mcrx_subscription_unref(sub);
-  mcrx_ctx_unref(ctx);
 
   int rc = close(sub->sock_fd);
   if (rc < 0) {
@@ -1003,10 +999,14 @@ MCRX_EXPORT int mcrx_subscription_leave(
     err(ctx, "sub %p (%s) close(%d) failed: %s\n", (void*)sub, desc,
         sub->sock_fd, buf);
     sub->sock_fd = 0;
+    mcrx_subscription_unref(sub);
+    mcrx_ctx_unref(ctx);
     return -EBADF;
   }
   sub->sock_fd = 0;
   info(ctx, "sub %p (%s) unsubscribed\n", (void*)sub, desc);
+  mcrx_subscription_unref(sub);
+  mcrx_ctx_unref(ctx);
   return 0;
 }
 

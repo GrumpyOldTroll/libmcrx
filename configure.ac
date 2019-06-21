@@ -49,7 +49,7 @@ AS_IF([test "x$enable_debug" = "xyes"], [
 #
 AC_CHECK_HEADER([dns_sd.h],
      [AC_DEFINE([HAVE_DNSSD_H], [1], [Define to 1 if you have <dns_sd.h>.])],
-     [AC_MSG_ERROR([could not include <dns_sd.h>. You need to install mdnsd or build from https://github.com/IETF-Hackathon/mDNSResponder.git (mDNSPosix) and set C_INCLUDE_PATH and LIBRARY_PATH])])
+     [AC_MSG_ERROR([could not include <dns_sd.h>. You need to install libavahi-compat-libdnssd-dev or build from https://github.com/IETF-Hackathon/mDNSResponder.git (mDNSPosix) and set C_INCLUDE_PATH and LIBRARY_PATH])])
 
 # commenting for mac.  it's not libdns_sd, it's part of system libraries,
 # so there needs to be a mac/other special case.
