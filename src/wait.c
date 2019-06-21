@@ -210,13 +210,16 @@ int mcrx_prv_add_socket_cb(
   for (idx = 0; idx < ctx->nevents; idx++) {
     evt = &ctx->events[idx];
     if (evt->filter == EVFILT_READ && evt->ident == (uintptr_t)fd) {
-      warn(ctx, "unusual: fd=%d flags=%x->%x already in event list\n",
-          fd, evt->flags, EV_ADD|EV_ENABLE);
+      struct mcrx_fd_handle *old_cb = (struct mcrx_fd_handle*)evt->udata;
+      warn(ctx, "fd=%d  already in event list flags=%x->%x handle=%p->%p\n",
+          fd, evt->flags, (EV_ADD|EV_ENABLE), (void*)old_cb->handle,
+          (void*)new_cb->handle);
+      evt->udata = new_cb;
       if (!(evt->flags & EV_ADD)) {
         ctx->nadded += 1;
       }
       evt->flags = EV_ADD | EV_ENABLE;
-      free(new_cb);
+      free(old_cb);
       return 0;
     }
   }
@@ -254,10 +257,66 @@ int mcrx_prv_add_socket_cb(
 int mcrx_prv_remove_socket_cb(
     struct mcrx_ctx* ctx,
     int fd) {
-  if (ctx->wait_fd == 0) {
-    return 0;
+  if (!ctx) {
+    errno = EINVAL;
+    err(ctx, "remove_socket_cb with no ctx\n");
+    return -1;
   }
-  (void)fd;
+  if (fd <= 0) {
+    errno = EINVAL;
+    err(ctx, "remove_socket_cb with bad fd (%d)\n", fd);
+    return -1;
+  }
+
+  u_int idx;
+  for (idx = 0; idx < ctx->nevents; idx++) {
+    struct kevent* evt;
+    evt = &ctx->events[idx];
+    if (evt->filter == EVFILT_READ && evt->ident == (uintptr_t)fd) {
+      if (ctx->nevents < 1) {
+        err(ctx, "internal error: nevents under 1 when removing a match\n");
+        errno = EINVAL;
+        return -1;
+      }
+      struct mcrx_fd_handle *old_cb = (struct mcrx_fd_handle*)evt->udata;
+      if (!old_cb) {
+        err(ctx, "internal error: no udata set on event for %d\n", fd);
+        errno = EINVAL;
+        return -1;
+      }
+      if (old_cb->ctx != ctx) {
+        err(ctx, "internal error: wrong ctx on %d\n", fd);
+      }
+      if (old_cb->fd != fd) {
+        err(ctx, "internal error: wrong ctx on %d\n", fd);
+      }
+      evt->udata = 0;
+      if (evt->flags & EV_ADD) {
+        if (ctx->nadded < 1) {
+          err(ctx,
+              "internal error: number added under 1 when removing an add %d\n",
+              fd);
+        } else {
+          ctx->nadded -= 1;
+        }
+      }
+      ctx->nevents -= 1;
+      // as long as the fd is closed, which we do after this call, the
+      // event is removed from the kernel list.
+      if (ctx->nevents == 0) {
+        free(ctx->events);
+        ctx->events = 0;
+        close(ctx->wait_fd);
+        ctx->wait_fd = 0;
+      } else {
+        ctx->events = (struct kevent*)realloc(ctx->events,
+            sizeof(struct kevent)*ctx->nevents);
+      }
+
+      free(old_cb);
+      return 0;
+    }
+  }
 
   return 0;
 }

@@ -109,8 +109,7 @@ main(int argc, char *argv[])
     return EXIT_FAILURE;
   }
 
-  // check I get warnings when not finishing this.
-  // mcrx_subscription_unref(sub);
+  mcrx_subscription_unref(sub);
   mcrx_ctx_unref(ctx);
   if (info.got_5) {
     return EXIT_SUCCESS;

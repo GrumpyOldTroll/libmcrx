@@ -530,6 +530,8 @@ static int native_receive(
   info(ctx, "receiving on %d\n", fd);
 
   int rc;
+  // keep subscription and ctx alive through callbacks even if unrefd.
+  mcrx_ctx_ref(ctx);
   mcrx_subscription_ref(sub);
   do {
     struct mcrx_packet *pkt = (struct mcrx_packet*)calloc(1,
@@ -537,6 +539,7 @@ static int native_receive(
     if (!pkt) {
       errno = ENOMEM;
       mcrx_subscription_unref(sub);
+      mcrx_ctx_unref(ctx);
       return -1;
     }
 
@@ -557,10 +560,12 @@ static int native_receive(
         // case EWOULDBLOCK:  (duplicate case value, EAGAIN is the same)
           free(pkt);
           mcrx_subscription_unref(sub);
+          mcrx_ctx_unref(ctx);
           return 0;
         default:
           free(pkt);
           mcrx_subscription_unref(sub);
+          mcrx_ctx_unref(ctx);
           return -1;
       }
     }
@@ -578,6 +583,7 @@ static int native_receive(
   } while (1);
 
   mcrx_subscription_unref(sub);
+  mcrx_ctx_unref(ctx);
   return 0;
 }
 
@@ -924,18 +930,28 @@ int mcrx_subscription_native_join(
     err(ctx, "sub %p (%s) no add_socket_cb\n", (void*)sub, desc);
     return -EINVAL;
   }
+  sub->sock_fd = sock_fd;
 
   info(ctx, "calling add_socket_cb\n");
+
+  // keep ctx and sub alive if callback unrefs
+  mcrx_ctx_ref(ctx);
+  mcrx_subscription_ref(sub);
   rc = ctx->add_socket_cb(ctx, (intptr_t)sub, sock_fd, native_receive);
   if (rc < 0) {
     char buf[1024];
     wrap_strerr(errno, buf, sizeof(buf));
     err(ctx, "sub %p (%s) add_fd() failed: %s\n", (void*)sub, desc, buf);
     close(sock_fd);
+    sub->sock_fd = 0;
+    mcrx_subscription_unref(sub);
+    mcrx_ctx_unref(ctx);
     return -EBADF;
   }
-
-  sub->sock_fd = sock_fd;
+  // keep subscription alive while held externally, do not unref here.
+  // (corresponding unref is in leave)
+  // mcrx_subscription_unref(sub);
+  mcrx_ctx_unref(ctx);
 
   return 0;
 }
@@ -950,8 +966,48 @@ int mcrx_subscription_native_join(
  **/
 MCRX_EXPORT int mcrx_subscription_leave(
     struct mcrx_subscription* sub) {
-  UNUSED(sub);
-  return -ENOTSUP;
+  struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
+  if (!sub || !ctx) {
+    if (!sub) {
+      err(ctx, "mcrx_subscription_leave with null sub\n");
+    } else {
+      err(ctx, "mcrx_subscription_leave with detached sub\n");
+    }
+    return -EINVAL;
+  }
+  if (sub->sock_fd <= 0) {
+    err(ctx, "mcrx_subscription_leave with closed socket\n");
+    return -EINVAL;
+  }
+  char desc[MCRX_SUB_STRLEN];
+  if (mcrx_subscription_ntop(sub, desc, sizeof(desc)) != 0) {
+    snprintf(desc, sizeof(desc), "unknown");
+  }
+  if (!ctx->remove_socket_cb) {
+    err(ctx, "sub %p (%s) no remove_socket_cb\n", (void*)sub, desc);
+    close(sub->sock_fd);
+    sub->sock_fd = 0;
+    return -EINVAL;
+  }
+  // keep ctx alive if callback unrefs
+  // subscription is ref'd already, held since the add_socket_cb.
+  mcrx_ctx_ref(ctx);
+  ctx->remove_socket_cb(ctx, sub->sock_fd);
+  mcrx_subscription_unref(sub);
+  mcrx_ctx_unref(ctx);
+
+  int rc = close(sub->sock_fd);
+  if (rc < 0) {
+    char buf[1024];
+    wrap_strerr(errno, buf, sizeof(buf));
+    err(ctx, "sub %p (%s) close(%d) failed: %s\n", (void*)sub, desc,
+        sub->sock_fd, buf);
+    sub->sock_fd = 0;
+    return -EBADF;
+  }
+  sub->sock_fd = 0;
+  info(ctx, "sub %p (%s) unsubscribed\n", (void*)sub, desc);
+  return 0;
 }
 
 /**
