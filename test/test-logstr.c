@@ -30,6 +30,7 @@
 struct sub_info {
   int npackets;
   int got_5;
+  int log_callbacks;
 };
 
 static void receive_cb(struct mcrx_packet* pkt) {
@@ -43,6 +44,8 @@ static void receive_cb(struct mcrx_packet* pkt) {
 
   if (info->npackets > 5) {
     printf("unsubscribing\n");
+    struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
+    mcrx_ctx_set_log_string_fn(ctx, NULL);
     mcrx_subscription_leave(sub);
     info->got_5 = 1;
   }
@@ -50,6 +53,19 @@ static void receive_cb(struct mcrx_packet* pkt) {
     fprintf(stderr, "did not stop at 5 packets\n");
     exit(1);
   }
+}
+
+static void string_log_fn(
+    struct mcrx_ctx *ctx,
+    int priority,
+    const char *file,
+    int line,
+    const char *fn,
+    const char *str) {
+  (void)priority;
+  struct sub_info *info = (struct sub_info*)mcrx_ctx_get_userdata(ctx);
+  info->log_callbacks += 1;
+  fprintf(stderr, "string_cb(%s:%d(%s)): %s", file, line, fn, str);
 }
 
 int
@@ -68,7 +84,16 @@ main(int argc, char *argv[])
     fprintf(stderr, "ctx_new failed\n");
     return EXIT_FAILURE;
   }
-  mcrx_ctx_set_log_priority(ctx, MCRX_LOGLEVEL_INFO);
+  mcrx_ctx_set_userdata(ctx, (intptr_t)&info);
+  mcrx_ctx_set_log_priority(ctx, MCRX_LOGLEVEL_DEBUG);
+  mcrx_ctx_set_log_string_fn(ctx, string_log_fn);
+  mcrx_ctx_log_msg(ctx, MCRX_LOGLEVEL_INFO, __FILE__, __LINE__, __func__,
+      "checking log err capability\n");
+  if (info.log_callbacks < 1) {
+    fprintf(stderr, "log_err failed\n");
+    mcrx_ctx_unref(ctx);
+    return EXIT_FAILURE;
+  }
 
   struct mcrx_subscription_config cfg = MCRX_SUBSCRIPTION_INIT;
   err = mcrx_subscription_config_pton(&cfg, "23.212.185.5", "232.1.1.1");
@@ -112,7 +137,7 @@ main(int argc, char *argv[])
 
   mcrx_subscription_unref(sub);
   mcrx_ctx_unref(ctx);
-  if (info.got_5) {
+  if (info.log_callbacks > 3) {
     return EXIT_SUCCESS;
   } else {
     return EXIT_FAILURE;

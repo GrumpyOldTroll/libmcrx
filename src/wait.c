@@ -57,9 +57,9 @@ MCRX_EXPORT int mcrx_ctx_receive_packets(
       free(ctx->triggered);
       ctx->triggered = NULL;
       ctx->ntriggered = 0;
-      if (ctx->wait_fd) {
+      if (ctx->wait_fd != -1) {
         close(ctx->wait_fd);
-        ctx->wait_fd = 0;
+        ctx->wait_fd = -1;
       }
     } else {
       warn(ctx, "waiting again for packets with no listeners\n");
@@ -72,9 +72,9 @@ MCRX_EXPORT int mcrx_ctx_receive_packets(
     }
     return EAGAIN;
   }
-  if (ctx->wait_fd == 0) {
+  if (ctx->wait_fd == -1) {
     int fd = kqueue();
-    if (fd <= 0) {
+    if (fd < 0) {
       char buf[1024];
       wrap_strerr(errno, buf, sizeof(buf));
       err(ctx, "failed kqueue: %s\n", buf);
@@ -122,7 +122,7 @@ MCRX_EXPORT int mcrx_ctx_receive_packets(
   if (nevents < 0) {
     char buf[1024];
     wrap_strerr(errno, buf, sizeof(buf));
-    err(ctx, "failed kevent: %s\n", buf);
+    err(ctx, "failed kevent(%d): %s\n", ctx->wait_fd, buf);
     return errno;
   }
 
@@ -191,7 +191,7 @@ int mcrx_prv_add_socket_cb(
     err(ctx, "add_socket_cb with no callback\n");
     return -1;
   }
-  if (fd <= 0) {
+  if (fd < 0) {
     errno = EINVAL;
     err(ctx, "add_socket_cb with bad fd (%d)\n", fd);
     return -1;
@@ -264,7 +264,7 @@ int mcrx_prv_remove_socket_cb(
     err(ctx, "remove_socket_cb with no ctx\n");
     return -1;
   }
-  if (fd <= 0) {
+  if (fd < 0) {
     errno = EINVAL;
     err(ctx, "remove_socket_cb with bad fd (%d)\n", fd);
     return -1;
@@ -304,7 +304,7 @@ int mcrx_prv_remove_socket_cb(
         free(ctx->events);
         ctx->events = 0;
         close(ctx->wait_fd);
-        ctx->wait_fd = 0;
+        ctx->wait_fd = -1;
       } else {
         ctx->events = (struct kevent*)realloc(ctx->events,
             sizeof(struct kevent)*ctx->nevents);
@@ -332,9 +332,9 @@ MCRX_EXPORT int mcrx_ctx_receive_packets(
       free(ctx->triggered);
       ctx->triggered = NULL;
       ctx->ntriggered = 0;
-      if (ctx->wait_fd) {
+      if (ctx->wait_fd != -1) {
         close(ctx->wait_fd);
-        ctx->wait_fd = 0;
+        ctx->wait_fd = -1;
       }
     } else {
       warn(ctx, "waiting again for packets with no listeners\n");
@@ -347,12 +347,12 @@ MCRX_EXPORT int mcrx_ctx_receive_packets(
     }
     return EAGAIN;
   }
-  if (ctx->wait_fd == 0) {
+  if (ctx->wait_fd == -1) {
     err(ctx, "no wait_fd ctx %p on entry to receive_packets\n", (void*)ctx);
     // shouldn't ever get here.  should make this fatal?
     // --jake 2019-06-21
     int fd = epoll_create1(EPOLL_CLOEXEC);
-    if (fd <= 0) {
+    if (fd < 0) {
       char buf[1024];
       wrap_strerr(errno, buf, sizeof(buf));
       err(ctx, "failed epoll_create1: %s\n", buf);
@@ -455,14 +455,14 @@ int mcrx_prv_add_socket_cb(
     err(ctx, "add_socket_cb with no callback\n");
     return -1;
   }
-  if (fd <= 0) {
+  if (fd < 0) {
     errno = EINVAL;
     err(ctx, "add_socket_cb with bad fd (%d)\n", fd);
     return -1;
   }
-  if (ctx->wait_fd == 0) {
+  if (ctx->wait_fd == -1) {
     int wait_fd = epoll_create1(EPOLL_CLOEXEC);
-    if (wait_fd <= 0) {
+    if (wait_fd < 0) {
       char buf[1024];
       wrap_strerr(errno, buf, sizeof(buf));
       err(ctx, "failed epoll_create1: %s\n", buf);
@@ -532,7 +532,7 @@ int mcrx_prv_remove_socket_cb(
     err(ctx, "remove_socket_cb with no ctx\n");
     return -1;
   }
-  if (fd <= 0) {
+  if (fd < 0) {
     errno = EINVAL;
     err(ctx, "remove_socket_cb with bad fd (%d)\n", fd);
     return -1;
@@ -549,7 +549,7 @@ int mcrx_prv_remove_socket_cb(
     dbg(ctx, "remove_socket_cb handle=%"PRIxPTR"x fd=%d cb=%p\n",
         cur_cb->handle, fd, (void*)cur_cb);
     ctx->nevents -= 1;
-    if (ctx->wait_fd) {
+    if (ctx->wait_fd != -1) {
       int rc = epoll_ctl(ctx->wait_fd, EPOLL_CTL_DEL, fd, evt);
       if (rc < 0) {
         char buf[1024];
@@ -565,7 +565,7 @@ int mcrx_prv_remove_socket_cb(
       free(ctx->events);
       ctx->events = 0;
       close(ctx->wait_fd);
-      ctx->wait_fd = 0;
+      ctx->wait_fd = -1;
     } else {
       ctx->events = (struct epoll_event*)realloc(ctx->events,
           sizeof(struct epoll_event)*ctx->nevents);

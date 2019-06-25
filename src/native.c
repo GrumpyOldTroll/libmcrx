@@ -45,7 +45,7 @@
 #define USE_JOIN_STRATEGY_FILTER 0
 #define USE_JOIN_STRATEGY_ADDMEM 0
 #define USE_JOIN_STRATEGY_MCAST_JOIN 1
-#elif defined (__APPLE__)
+#elif defined(__APPLE__)
 #define USE_JOIN_STRATEGY_FILTER 0
 #define USE_JOIN_STRATEGY_ADDMEM 1
 #define BROKEN_ADD_MEMBERSHIP_V6
@@ -349,13 +349,15 @@ static int mcrx_find_interface(
   // extract the local interface by connecting a udp socket to the
   // source and checking its local address.
   int check_sock = socket(family, SOCK_DGRAM, IPPROTO_UDP);
-  if (check_sock <= 0) {
+  if (check_sock < 0) {
     char buf[1024];
     wrap_strerr(errno, buf, sizeof(buf));
     err(ctx, "sub %p socket failed: %s\n",
         (void*)sub, buf);
     return -EINVAL;
   }
+  info(ctx, "sub %p interface lookup socket created: %d\n",
+      (void*)sub, check_sock);
 
   int rc;
   rc = connect(check_sock, sp, sa_len);
@@ -385,7 +387,13 @@ static int mcrx_find_interface(
     close(check_sock);
     return -EINVAL;
   }
-  close(check_sock);
+  rc = close(check_sock);
+  if (rc < 0) {
+    char buf[1024];
+    wrap_strerr(errno, buf, sizeof(buf));
+    warn(ctx, "sub %p close(%d) errored(ignoring): %s\n",
+        (void*)sub, check_sock, buf);
+  }
 
   // now sp is the local address for a socket that could send to
   // the source, so use that to find the interface index (and for
@@ -622,6 +630,41 @@ int mcrx_subscription_native_join(
     err(ctx, "sub %p (%s) socket failed: %s\n", (void*)sub, buf, desc);
     return -EBADF;
   }
+  if (sock_fd == 0) {
+    // fd=0 usually is stdin, but in some apps that close stdin or reassign it,
+    // socket can return 0, and it's a non-error.
+    // However, unfortunately, this causes a close(0) call later, and that
+    // fails with strerror providing "Bad file descriptor".  It's not fully
+    // clear that all other functions work properly with a 0 fd.
+    // Therefore, insist on a nonzero socket by opening a new socket in the
+    // event of a 0.
+    int alt_fd = socket(family, SOCK_DGRAM, IPPROTO_UDP);
+    if (alt_fd < 0) {
+      char buf[1024];
+      wrap_strerr(errno, buf, sizeof(buf));
+      err(ctx, "sub %p (%s) socket failed (after 0): %s\n", (void*)sub, buf,
+          desc);
+      return -EBADF;
+    }
+    rc = close(sock_fd);
+    if (rc < 0) {
+      char buf[1024];
+      wrap_strerr(errno, buf, sizeof(buf));
+      warn(ctx,
+          "sub %p (%s) close of socket(0) failed (replaced with %d): %s\n",
+          (void*)sub, buf, alt_fd, desc);
+    }
+    if (alt_fd == 0) {
+      char buf[1024];
+      wrap_strerr(errno, buf, sizeof(buf));
+      err(ctx, "sub %p (%s) socket failed (re-zero after 0): %s\n",
+          (void*)sub, buf, desc);
+      close(alt_fd);
+      return -EBADF;
+    }
+    sock_fd = alt_fd;
+  }
+  info(ctx, "sub %p (%s) socket created: %d\n", (void*)sub, desc, sock_fd);
 
   int val;
   int len;
@@ -931,6 +974,7 @@ int mcrx_subscription_native_join(
     return -EINVAL;
   }
   sub->sock_fd = sock_fd;
+  sub->joined = 1;
 
   info(ctx, "calling add_socket_cb\n");
 
@@ -943,7 +987,8 @@ int mcrx_subscription_native_join(
     wrap_strerr(errno, buf, sizeof(buf));
     err(ctx, "sub %p (%s) add_fd() failed: %s\n", (void*)sub, desc, buf);
     close(sock_fd);
-    sub->sock_fd = 0;
+    sub->sock_fd = -1;
+    sub->joined = 0;
     mcrx_subscription_unref(sub);
     mcrx_ctx_unref(ctx);
     return -EBADF;
@@ -973,7 +1018,7 @@ MCRX_EXPORT int mcrx_subscription_leave(
     }
     return -EINVAL;
   }
-  if (sub->sock_fd <= 0) {
+  if (sub->sock_fd < 0) {
     err(ctx, "mcrx_subscription_leave with closed socket\n");
     return -EINVAL;
   }
@@ -984,7 +1029,8 @@ MCRX_EXPORT int mcrx_subscription_leave(
   if (!ctx->remove_socket_cb) {
     err(ctx, "sub %p (%s) no remove_socket_cb\n", (void*)sub, desc);
     close(sub->sock_fd);
-    sub->sock_fd = 0;
+    sub->sock_fd = -1;
+    sub->joined = 0;
     return -EINVAL;
   }
   // keep ctx alive if callback unrefs
@@ -998,12 +1044,14 @@ MCRX_EXPORT int mcrx_subscription_leave(
     wrap_strerr(errno, buf, sizeof(buf));
     err(ctx, "sub %p (%s) close(%d) failed: %s\n", (void*)sub, desc,
         sub->sock_fd, buf);
-    sub->sock_fd = 0;
+    sub->sock_fd = -1;
+    sub->joined = 0;
     mcrx_subscription_unref(sub);
     mcrx_ctx_unref(ctx);
     return -EBADF;
   }
-  sub->sock_fd = 0;
+  sub->sock_fd = -1;
+  sub->joined = 0;
   info(ctx, "sub %p (%s) unsubscribed\n", (void*)sub, desc);
   mcrx_subscription_unref(sub);
   mcrx_ctx_unref(ctx);

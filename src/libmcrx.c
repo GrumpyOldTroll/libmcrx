@@ -45,7 +45,7 @@
  */
 void mcrx_log(
     struct mcrx_ctx *ctx,
-    int priority,
+    enum mcrx_log_priority priority,
     const char *file,
     int line,
     const char *fn,
@@ -73,6 +73,153 @@ static void log_stderr(
 
   fprintf(stderr, "libmcrx: %s: ", fn);
   vfprintf(stderr, format, args);
+}
+
+static void log_string_cb(
+    struct mcrx_ctx *ctx,
+    int priority,
+    const char *file,
+    int line,
+    const char *fn,
+    const char *format,
+    va_list args) {
+
+  if (!ctx) {
+    fprintf(stderr, "%s: %d (%s) error: log_string_cb null ctx\n",
+        file, line, fn);
+    return;
+  }
+  if (!ctx->string_log_fn) {
+    fprintf(stderr, "%s: %d (%s) error: log_string_cb called unattached\n",
+        file, line, fn);
+    log_stderr(ctx, priority, file, line, fn, format, args);
+    return;
+  }
+  char buf[1024];
+  int buflen = sizeof(buf);
+  int len = vsnprintf(buf, buflen, format, args);
+  if (len < buflen && len >= 0) {
+    buf[len] = 0;
+  } else {
+    buf[sizeof(buf)-1] = 0;
+    len = sizeof(buf);
+  }
+  ctx->string_log_fn(ctx, priority, file, line, fn, buf);
+}
+
+/**
+ * mcrx_ctx_set_log_fn:
+ * @ctx: mcrx library context
+ * @log_fn: function to be called for logging messages
+ *
+ * The built-in logging writes to stderr. It can be
+ * overridden by a custom function, to plug log messages
+ * into the user's logging functionality.
+ *
+ **/
+MCRX_EXPORT void mcrx_ctx_set_log_fn(
+    struct mcrx_ctx *ctx,
+    void (*log_fn)(
+      struct mcrx_ctx *ctx,
+      int priority,
+      const char *file,
+      int line,
+      const char *fn,
+      const char *format,
+      va_list args)) {
+  if (!ctx) {
+    info(ctx, "mcrx_ctx_set_log_fn called with no ctx\n");
+    return;
+  }
+
+  void (*old_log_fn)(
+      struct mcrx_ctx *ctx,
+      int priority,
+      const char *file,
+      int line,
+      const char *fn,
+      const char *format,
+      va_list args);
+  old_log_fn = ctx->log_fn;
+
+  if (log_fn == NULL) {
+    ctx->log_fn = log_stderr;
+    ctx->string_log_fn = NULL;
+  } else {
+    ctx->log_fn = log_fn;
+    ctx->string_log_fn = NULL;
+  }
+
+  // PRIxPTR from <inttypes.h> should compile everywhere, but this
+  // probably works too, if it has trouble: --jake 2019-06-17
+  // "custom logging function %016llx registered (replaced %016llx)\n",
+  // (unsigned long long)log_fn, (unsigned long long)ctx->log_fn);
+  info(ctx,
+      "custom logging function %016"PRIxPTR
+      " registered (replaced %016"PRIxPTR")\n",
+      (uintptr_t)log_fn, (uintptr_t)old_log_fn);
+}
+
+MCRX_EXPORT void mcrx_ctx_set_log_string_fn(
+    struct mcrx_ctx *ctx,
+    void (*string_log_fn)(
+      struct mcrx_ctx *ctx,
+      int priority,
+      const char *file,
+      int line,
+      const char *fn,
+      const char *str)) {
+  if (!ctx) {
+    info(ctx, "mcrx_ctx_set_log_string_fn called with no ctx\n");
+    return;
+  }
+
+  void (*old_string_log_fn)(struct mcrx_ctx *ctx, int priority,
+    const char *file, int line, const char *fn,
+    const char *str);
+  old_string_log_fn = ctx->string_log_fn;
+  if (string_log_fn == NULL) {
+    ctx->log_fn = log_stderr;
+    ctx->string_log_fn = NULL;
+  } else {
+    ctx->log_fn = log_string_cb;
+    ctx->string_log_fn = string_log_fn;
+  }
+  info(ctx,
+      "custom logging function %016"PRIxPTR
+      " registered (replaced %016"PRIxPTR")\n",
+      (uintptr_t)string_log_fn, (uintptr_t)old_string_log_fn);
+}
+
+MCRX_EXPORT void mcrx_ctx_log_msg(
+    struct mcrx_ctx *ctx,
+    enum mcrx_log_priority prio,
+    const char* file,
+    int line,
+    const char* fn,
+    const char* msg) {
+  if (!ctx) {
+    err(ctx, "no ctx for log_msg(%d,%s:%d/%s): %s", (int)prio,
+        file, line, fn, msg);
+    return;
+  }
+  if (!ctx->log_fn) {
+    err(ctx, "no log_fn for log_msg(%d,%s:%d/%s): %s", (int)prio,
+        file, line, fn, msg);
+    return;
+  }
+  switch (prio) {
+    case MCRX_LOGLEVEL_DEBUG:
+    case MCRX_LOGLEVEL_INFO:
+    case MCRX_LOGLEVEL_WARNING:
+    case MCRX_LOGLEVEL_ERROR:
+      mcrx_log(ctx, prio, file, line, fn, "%s", msg);
+      break;
+    default:
+      err(ctx, "bad priority for log_msg(%d,%s:%d/%s): %s", (int)prio,
+          file, line, fn, msg);
+      break;
+  }
 }
 
 /**
@@ -180,8 +327,9 @@ MCRX_EXPORT int mcrx_ctx_new(
   c->timeout_ms = 1000 + random() % 1000;
   c->add_socket_cb = mcrx_prv_add_socket_cb;
   c->remove_socket_cb = mcrx_prv_remove_socket_cb;
+  c->wait_fd = -1;
 
-  info(c, "version %s context %p created\n", VERSION, (void *)c);
+  // info(c, "version %s context %p created\n", VERSION, (void *)c);
   dbg(c, "log_priority=%d\n", c->log_priority);
   *ctxp = c;
   return 0;
@@ -235,6 +383,9 @@ MCRX_EXPORT struct mcrx_ctx *mcrx_ctx_unref(
     sub = LIST_FIRST(&ctx->subs_head);
     warn(ctx, "subscription %p still alive when deleting context %p\n",
         (void*)sub, (void*)ctx);
+    if (sub->joined) {
+      mcrx_subscription_leave(sub);
+    }
     sub->ctx = NULL;
     LIST_REMOVE(sub, sub_entries);
     nsubs += 1;
@@ -244,47 +395,15 @@ MCRX_EXPORT struct mcrx_ctx *mcrx_ctx_unref(
         nsubs, (void*)ctx);
   }
 
-  if (ctx->wait_fd) {
+  if (ctx->wait_fd != -1) {
+    err(ctx, "wait_fd still alive when deleting context %p\n", (void*)ctx);
     close(ctx->wait_fd);
-    ctx->wait_fd = 0;
+    ctx->wait_fd = -1;
   }
 
   info(ctx, "context %p released\n", (void *)ctx);
   free(ctx);
   return NULL;
-}
-
-/**
- * mcrx_ctx_set_log_fn:
- * @ctx: mcrx library context
- * @log_fn: function to be called for logging messages
- *
- * The built-in logging writes to stderr. It can be
- * overridden by a custom function, to plug log messages
- * into the user's logging functionality.
- *
- **/
-MCRX_EXPORT void mcrx_ctx_set_log_fn(
-    struct mcrx_ctx *ctx,
-    void (*log_fn)(
-      struct mcrx_ctx *ctx,
-      int priority,
-      const char *file,
-      int line,
-      const char *fn,
-      const char *format,
-      va_list args)) {
-  info(ctx,
-      "custom logging function %016"PRIxPTR
-      " registered (replaced %016"PRIxPTR")\n",
-      (uintptr_t)log_fn, (uintptr_t)ctx->log_fn);
-
-  // PRIxPTR from <inttypes.h> should compile everywhere, but this
-  // probably works too, if it has trouble: --jake 2019-06-17
-  // "custom logging function %016llx registered (replaced %016llx)\n",
-  // (unsigned long long)log_fn, (unsigned long long)ctx->log_fn);
-
-  ctx->log_fn = log_fn;
 }
 
 /**
@@ -328,14 +447,13 @@ MCRX_EXPORT void mcrx_ctx_set_log_priority(
  **/
 MCRX_EXPORT struct mcrx_subscription* mcrx_subscription_ref(
     struct mcrx_subscription* sub) {
+  struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
   if (sub == NULL) {
-    warn(mcrx_subscription_get_ctx(sub),
-         "subscription %p increment attempted\n", (void *)sub);
+    warn(ctx, "subscription %p increment attempted\n", (void *)sub);
     return NULL;
   }
 
-  dbg(mcrx_subscription_get_ctx(sub),
-      "subscription %p incremented\n", (void *)sub);
+  dbg(ctx, "subscription %p incremented\n", (void *)sub);
   sub->refcount++;
   return sub;
 }
@@ -351,16 +469,18 @@ MCRX_EXPORT struct mcrx_subscription* mcrx_subscription_ref(
  **/
 MCRX_EXPORT struct mcrx_subscription* mcrx_subscription_unref(
     struct mcrx_subscription* sub) {
+  struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
   if (sub == NULL) {
-    warn(mcrx_subscription_get_ctx(sub),
-        "subscription %p decrement attempted\n", (void *)sub);
+    warn(ctx, "null subscription %p unref attempted\n", (void *)sub);
     return NULL;
+  }
+  if (ctx == NULL) {
+    warn(ctx, "detached subscription %p ctx NULL on unref\n", (void *)sub);
   }
 
   sub->refcount--;
   if (sub->refcount > 0) {
-    dbg(mcrx_subscription_get_ctx(sub),
-        "subscription %p decremented\n", (void *)sub);
+    dbg(ctx, "subscription %p decremented\n", (void *)sub);
     return sub;
   }
 
@@ -368,27 +488,19 @@ MCRX_EXPORT struct mcrx_subscription* mcrx_subscription_unref(
   while (!TAILQ_EMPTY(&sub->pkts_head)) {
     struct mcrx_packet *pkt;
     pkt = TAILQ_FIRST(&sub->pkts_head);
-    warn(mcrx_subscription_get_ctx(sub),
-        "packet %p still alive when deleting subscription %p\n",
-        (void*)pkt, (void*)sub);
     pkt->sub = NULL;
     TAILQ_REMOVE(&sub->pkts_head, pkt, pkt_entries);
     npkts += 1;
   }
   if (npkts != 0) {
-    err(mcrx_subscription_get_ctx(sub),
-        "%d packets still alive when deleting subscription %p\n",
+    warn(ctx, "%d packets still alive when deleting subscription %p\n",
         npkts, (void*)sub);
   }
 
-  // TBD: jake 2019-06-16: is this safe if it's removed already? how to check?
-  LIST_REMOVE(sub, sub_entries);
-  if (sub->ctx == NULL) {
-    warn(mcrx_subscription_get_ctx(sub),
-        "subscription %p ctx NULL when released\n", (void *)sub);
+  if (ctx) {
+    LIST_REMOVE(sub, sub_entries);
   }
-  info(mcrx_subscription_get_ctx(sub),
-      "subscription %p released\n", (void *)sub);
+  info(ctx, "subscription %p released\n", (void *)sub);
 
   free(sub);
   return NULL;
@@ -453,7 +565,9 @@ static void default_receive_cb(
     struct mcrx_packet* pkt) {
   struct mcrx_subscription* sub = mcrx_packet_get_subscription(pkt);
   struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
-  warn(ctx, "sub %p no receive callback set for pkt\n", (void*)sub);
+  int len = mcrx_packet_get_contents(pkt, NULL);
+  warn(ctx, "sub %p no receive callback set for pkt %p len %d\n", (void*)sub,
+      (void*)pkt, len);
 }
 
 /**
@@ -476,7 +590,7 @@ MCRX_EXPORT int mcrx_subscription_new(
     return -EINVAL;
   }
 
-  if (config->magic != MCRX_SUBSCRIPTION_MAGIC) {
+  if (config->magic != MCRX_SUBSCRIPTION_INIT_MAGIC) {
     warn(ctx, "config should be initialized with MCRX_SUBSCRIPTION_INIT\n");
   }
   struct mcrx_subscription* sub;
@@ -488,7 +602,8 @@ MCRX_EXPORT int mcrx_subscription_new(
   sub->ctx = ctx;
   sub->refcount = 1;
   sub->receive_cb = default_receive_cb;
-  
+  sub->sock_fd = -1;
+
   // default assume 1500 ethernet, minus:
   // ip  (20 v4 or 40 v6, according to amt)
   // udp (8)
@@ -558,14 +673,14 @@ MCRX_EXPORT int mcrx_subscription_join(
  **/
 MCRX_EXPORT struct mcrx_packet* mcrx_packet_ref(
     struct mcrx_packet* pkt) {
+  struct mcrx_subscription* sub = mcrx_packet_get_subscription(pkt);
+  struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
   if (pkt == NULL) {
-    warn(mcrx_subscription_get_ctx(mcrx_packet_get_subscription(pkt)),
-         "packet %p increment attempted\n", (void *)pkt);
+    warn(ctx, "packet %p increment attempted\n", (void *)pkt);
     return NULL;
   }
 
-  dbg(mcrx_subscription_get_ctx(mcrx_packet_get_subscription(pkt)),
-      "packet %p incremented\n", (void *)pkt);
+  dbg(ctx, "packet %p incremented\n", (void *)pkt);
   pkt->refcount++;
   return pkt;
 }
@@ -581,30 +696,26 @@ MCRX_EXPORT struct mcrx_packet* mcrx_packet_ref(
  **/
 MCRX_EXPORT struct mcrx_packet* mcrx_packet_unref(
     struct mcrx_packet* pkt) {
+  struct mcrx_subscription* sub = mcrx_packet_get_subscription(pkt);
+  struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
   if (pkt == NULL) {
-    warn(mcrx_subscription_get_ctx(mcrx_packet_get_subscription(pkt)),
-        "packet %p decrement attempted\n", (void *)pkt);
+    warn(ctx, "packet %p decrement attempted\n", (void *)pkt);
     return NULL;
   }
 
-  struct mcrx_subscription* sub = mcrx_packet_get_subscription(pkt);
-
   pkt->refcount--;
   if (pkt->refcount > 0) {
-    dbg(mcrx_subscription_get_ctx(sub),
-        "packet %p decremented\n", (void *)pkt);
+    dbg(ctx, "packet %p decremented\n", (void *)pkt);
     return pkt;
   }
 
   if (sub == NULL) {
-    warn(mcrx_subscription_get_ctx(sub),
-        "packet %p sub NULL when released\n", (void *)pkt);
+    warn(ctx, "packet %p sub NULL when released\n", (void *)pkt);
   } else {
     TAILQ_REMOVE(&sub->pkts_head, pkt, pkt_entries);
   }
 
-  dbg(mcrx_subscription_get_ctx(mcrx_packet_get_subscription(pkt)),
-      "packet %p released\n", (void *)pkt);
+  dbg(ctx, "packet %p released\n", (void *)pkt);
   free(pkt);
   return NULL;
 }

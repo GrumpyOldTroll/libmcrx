@@ -51,15 +51,15 @@ mcrx_log_null(struct mcrx_ctx *ctx, const char *format, ...) {
       mcrx_log(ctx, prio, __FILE__, __LINE__, __func__, __VA_ARGS__); \
   } while (0)
 
-#ifdef ENABLE_LOGGING
-#ifdef ENABLE_DEBUG
-#define dbg(ctx, ...) mcrx_log_cond(ctx, LOG_DEBUG, __VA_ARGS__)
+#ifndef DISABLE_LOGGING
+#ifndef DISABLE_DEBUG
+#define dbg(ctx, ...) mcrx_log_cond(ctx, MCRX_LOGLEVEL_DEBUG, __VA_ARGS__)
 #else
 #define dbg(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
 #endif
-#define info(ctx, ...) mcrx_log_cond(ctx, LOG_INFO, __VA_ARGS__)
-#define warn(ctx, ...) mcrx_log_cond(ctx, LOG_WARNING, __VA_ARGS__)
-#define err(ctx, ...) mcrx_log_cond(ctx, LOG_ERR, __VA_ARGS__)
+#define info(ctx, ...) mcrx_log_cond(ctx, MCRX_LOGLEVEL_INFO, __VA_ARGS__)
+#define warn(ctx, ...) mcrx_log_cond(ctx, MCRX_LOGLEVEL_WARNING, __VA_ARGS__)
+#define err(ctx, ...) mcrx_log_cond(ctx, MCRX_LOGLEVEL_ERROR, __VA_ARGS__)
 #else
 #define dbg(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
 #define info(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
@@ -69,8 +69,8 @@ mcrx_log_null(struct mcrx_ctx *ctx, const char *format, ...) {
 
 #define MCRX_EXPORT __attribute__((visibility("default")))
 
-void mcrx_log(struct mcrx_ctx *ctx, int priority, const char *file,
-                 int line, const char *fn, const char *format, ...)
+void mcrx_log(struct mcrx_ctx *ctx, enum mcrx_log_priority priority,
+    const char *file, int line, const char *fn, const char *format, ...)
     __attribute__((format(printf, 6, 7)));
 
 /**
@@ -102,6 +102,7 @@ struct mcrx_subscription {
   struct mcrx_subscription_config input;
   int sock_fd;
   void (*receive_cb)(struct mcrx_packet* packet);
+  int joined;
 };
 
 /**
@@ -111,10 +112,14 @@ struct mcrx_subscription {
  */
 struct mcrx_ctx {
   int refcount;
-  void (*log_fn)(struct mcrx_ctx *ctx, int priority, const char *file,
-                 int line, const char *fn, const char *format, va_list args);
+  void (*log_fn)(struct mcrx_ctx *ctx, int priority,
+      const char *file, int line, const char *fn,
+      const char *format, va_list args);
+  void (*string_log_fn)(struct mcrx_ctx *ctx, int priority,
+      const char *file, int line, const char *fn,
+      const char *str);
   intptr_t userdata;
-  int log_priority;
+  enum mcrx_log_priority log_priority;
   LIST_HEAD(listhead, mcrx_subscription) subs_head;
   int timeout_ms;
   int wait_fd;

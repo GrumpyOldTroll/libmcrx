@@ -1,21 +1,49 @@
 
+manual test run under gdb:
+linux:
+LD_LIBRARY_PATH=src/.libs gdb test/.libs/test1-libmcrx
+
+mac:
+DYLD_LIBRARY_PATH=src/.libs gdb test/.libs/test1-libmcrx
+
+how to run receive tests:
+
+I'm running a source of 1kbps/1pps test traffic reachable with AMT at:
+23.212.185.5->232.1.1.1(5001)
+# 2600:014e::5 -> ffe3::8101:0101
+
+The AMT relay for these sources is discoverable with DRIAD, so running
+inside a test network using the multicast ingest platform should make it
+reachable:
+https://github.com/GrumpyOldTroll/multicast-ingest-platform
+
+You can also dynamically discover an IP for the AMT relay to run a
+gateway manually, like if you just want a pure virtual setup on a dev
+machine:
+SRC=23.212.185.5
+REV=$(python3 -c "import ipaddress; print(ipaddress.ip_address('$SRC').reverse_pointer)")
+AMT4=$(dig +short -t TYPE260 $REV | python3 driad.py)
+echo $AMT4
+
+SRC=2600:14e0::5
+
 running on mac
-- with a virtualbox vm with a host-only interface plust a nat interface
-  - on host: vboxnet0, 192.168.56.1
-  - on guest: enp0s8, 192.168.56.2
+with a virtualbox vm with a host-only interface plus a nat interface:
+  - on host: vboxnet0, 192.168.56.1/24
+  - on guest: enp0s8, 192.168.56.2/24
 
-on guest:
-- make a macvlan network linking container to the host-only adapter:
-  docker network create --driver macvlan --subnet=192.168.56.0/24 --ip-range=192.168.56.0/26 --gateway=192.168.56.1 -o parent=enp0s8 xamtbr0
-- run amtgw connecting with that network for data:
-  AMTRELAY_IP=18.144.22.247
-  docker create --rm --name amtgw --privileged grumpyoldtroll/amtgw $AMTRELAY_IP && \
-  docker network connect macnet56 amtgw && \
-  docker start amtgw
+  on guest:
+  - make a macvlan network linking container to the host-only adapter:
+    docker network create --driver macvlan --subnet=192.168.56.0/24 --ip-range=192.168.56.0/26 --gateway=192.168.56.1 -o parent=enp0s8 xamtbr0
 
-on host:
-- add a route to the source, headed toward the vm:
-  sudo route add -net 23.212.185.0/24 192.168.56.2
-- now joins should join there.
+  - run amtgw connecting with that network for data:
+    docker create --rm --name amtgw --privileged grumpyoldtroll/amtgw $AMT && \
+    docker network connect macnet56 amtgw && \
+    docker start amtgw
+
+  on host:
+  - add a route to the source, headed toward the vm:
+    sudo route add -net 23.212.185.0/24 192.168.56.2
+  - now joins should join there.
 
 

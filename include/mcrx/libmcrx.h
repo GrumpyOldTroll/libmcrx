@@ -22,31 +22,30 @@
 #define GUARD_LIBMCRX_H
 
 #include <stdarg.h>
-#include <syslog.h>
 #include <netinet/in.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/*
- * mcrx_ctx
+/**
+ * mcrx_ctx:
  *
  * library user context - reads the config and system
  * environment, user variables, allows custom logging
  */
 struct mcrx_ctx;
 
-/*
- * mcrx_subscription
+/**
+ * mcrx_subscription:
  *
  * subscription handle - joins a (S,G) and passes received
  * packets to library user.
  */
 struct mcrx_subscription;
 
-/*
- * mcrx_packet
+/**
+ * mcrx_packet:
  *
  * packet handle - provides data and packet lengths to
  * library user.
@@ -65,6 +64,8 @@ void mcrx_ctx_set_userdata(
 
 int mcrx_ctx_new(
     struct mcrx_ctx **ctxp);
+
+
 void mcrx_ctx_set_log_fn(
     struct mcrx_ctx *ctx,
     void (*log_fn)(
@@ -75,12 +76,43 @@ void mcrx_ctx_set_log_fn(
       const char *fn,
       const char *format,
       va_list args));
+void mcrx_ctx_set_log_string_fn(
+    struct mcrx_ctx *ctx,
+    void (*log_fn)(
+      struct mcrx_ctx *ctx,
+      int priority,
+      const char *file,
+      int line,
+      const char *fn,
+      const char *str));
+// log priority values match those in <sys/syslog.h>
+// but only these values are supported.
+enum mcrx_log_priority {
+  MCRX_LOGLEVEL_ERROR = 3,    // MCRX_LOG=err
+  MCRX_LOGLEVEL_WARNING = 4,  // MCRX_LOG=warn
+  MCRX_LOGLEVEL_INFO = 6,     // MCRX_LOG=info
+  MCRX_LOGLEVEL_DEBUG = 7,    // MCRX_LOG=dbg
+};
 // log priority: LOG_ERR, LOG_WARNING, LOG_INFO, or LOG_DEBUG (syslog.h)
 int mcrx_ctx_get_log_priority(
     struct mcrx_ctx *ctx);
 void mcrx_ctx_set_log_priority(
     struct mcrx_ctx *ctx,
     int priority);
+
+/**
+ * mcrx_ctx_log_msg:
+ *
+ * writes a message into the same log stream as mcrx internal logging.
+ */
+void mcrx_ctx_log_msg(
+    struct mcrx_ctx *ctx,
+    enum mcrx_log_priority prio,
+    const char *file,
+    int line,
+    const char *fn,
+    const char* msg);
+
 // Default value is 1000+random()%1000
 // like epoll, 0 means don't block, -1 means infinity
 void mcrx_ctx_set_wait_ms(
@@ -89,8 +121,8 @@ void mcrx_ctx_set_wait_ms(
 int mcrx_ctx_receive_packets(
     struct mcrx_ctx *ctx);
 
-/*
- * mcrx_subscription_addrs_v4
+/**
+ * mcrx_subscription_addrs_v4:
  *
  * on platforms with struct in_addr, a memcpy from one of those into
  * these objects is ok.  This is declared weird for easier cross-platform.
@@ -103,8 +135,8 @@ struct mcrx_subscription_addrs_v4 {
   struct in_addr group;
 };
 
-/*
- * mcrx_subscription_addrs_v6
+/**
+ * mcrx_subscription_addrs_v6:
  *
  * on platforms with struct in6_addr, a memcpy from one of those into
  * these objects is ok.  This is declared weird for easier cross-platform.
@@ -123,8 +155,8 @@ enum MCRX_ADDR_TYPE {
   MCRX_ADDR_TYPE_V6
 };
 
-/*
- * mcrx_subscription_config
+/**
+ * mcrx_subscription_config:
  *
  * config for the subscription object.  Provides the (S,G) either as
  * a pair of v4 addresses, a pair of v6 addresses, or a pair of DNS
@@ -142,10 +174,10 @@ struct mcrx_subscription_config {
   uint16_t port;  // in host byte order (.port=255 to get wire=0x00ff)
   uint16_t packet_size;
 };
-#define MCRX_SUBSCRIPTION_MAGIC 0x42
+#define MCRX_SUBSCRIPTION_INIT_MAGIC 0x42
 // default values
 #define MCRX_SUBSCRIPTION_INIT { \
-  .magic = MCRX_SUBSCRIPTION_MAGIC, \
+  .magic = MCRX_SUBSCRIPTION_INIT_MAGIC, \
   .packet_size = 1452 \
 }
 

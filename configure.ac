@@ -22,9 +22,9 @@ AC_PROG_MKDIR_P
 
 AC_ARG_ENABLE([logging],
         AS_HELP_STRING([--disable-logging], [disable system logging @<:@default=enabled@:>@]),
-        [], enable_logging=yes)
-AS_IF([test "x$enable_logging" = "xyes"], [
-        AC_DEFINE(ENABLE_LOGGING, [1], [System logging.])
+        disable_logging=yes, [])
+AS_IF([test "x$disable_logging" = "xyes"], [
+        AC_DEFINE(DISABLE_LOGGING, [1], [System logging.])
 ])
 
 AC_PATH_PROG([CPPLINT], [cpplint], [true])
@@ -34,9 +34,9 @@ Get it from 'pip install cpplint' or https://github.com/cpplint/cpplint])])
 
 AC_ARG_ENABLE([debug],
         AS_HELP_STRING([--enable-debug], [enable debug messages @<:@default=disabled@:>@]),
-        [], [enable_debug=no])
-AS_IF([test "x$enable_debug" = "xyes"], [
-        AC_DEFINE(ENABLE_DEBUG, [1], [Debug messages.])
+        [], [disable_debug=yes])
+AS_IF([test "x$disable_debug" = "xyes"], [
+        AC_DEFINE(DISABLE_DEBUG, [1], [Debug messages.])
 ])
 
 #AC_CHECK_HEADER([event.h],

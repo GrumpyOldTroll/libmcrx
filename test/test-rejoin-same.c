@@ -110,6 +110,21 @@ main(int argc, char *argv[])
     return EXIT_FAILURE;
   }
 
+  info.npackets = 0;
+  info.got_5 = 0;
+  sleep(5);
+  err = mcrx_subscription_join(sub);
+  if (err < 0) {
+    fprintf(stderr, "subscription join failed\n");
+    mcrx_subscription_unref(sub);
+    mcrx_ctx_unref(ctx);
+    return EXIT_FAILURE;
+  }
+
+  do {
+    err = mcrx_ctx_receive_packets(ctx);
+  } while (!err || err == ETIMEDOUT);
+
   mcrx_subscription_unref(sub);
   mcrx_ctx_unref(ctx);
   if (info.got_5) {
