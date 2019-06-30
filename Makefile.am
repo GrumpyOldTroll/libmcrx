@@ -39,7 +39,7 @@ LIBMCRX_CURRENT=2
 LIBMCRX_REVISION=0
 LIBMCRX_AGE=2
 
-pkginclude_HEADERS = include/mcrx/libmcrx.h
+pkginclude_HEADERS = include/mcrx/libmcrx.h include/mcrx/errors.h
 lib_LTLIBRARIES = src/libmcrx.la
 
 src_libmcrx_la_SOURCES =\

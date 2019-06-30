@@ -33,7 +33,7 @@ struct sub_info {
   int log_callbacks;
 };
 
-static void receive_cb(struct mcrx_packet* pkt) {
+static int receive_cb(struct mcrx_packet* pkt) {
   unsigned int length = mcrx_packet_get_contents(pkt, 0);
   printf("got packet, length=%u\n", length);
   struct mcrx_subscription* sub = mcrx_packet_get_subscription(pkt);
@@ -52,7 +52,9 @@ static void receive_cb(struct mcrx_packet* pkt) {
   if (info->npackets > 100) {
     fprintf(stderr, "did not stop at 5 packets\n");
     exit(1);
+    return MCRX_RECEIVE_STOP_CTX;
   }
+  return MCRX_RECEIVE_CONTINUE;
 }
 
 static void string_log_fn(
@@ -95,7 +97,7 @@ main(int argc, char *argv[])
     return EXIT_FAILURE;
   }
 
-  struct mcrx_subscription_config cfg = MCRX_SUBSCRIPTION_INIT;
+  struct mcrx_subscription_config cfg = MCRX_SUBSCRIPTION_CONFIG_INIT;
   err = mcrx_subscription_config_pton(&cfg, "23.212.185.5", "232.1.1.1");
   if (err != 0) {
     fprintf(stderr, "subscription_config_pton failed\n");
@@ -106,7 +108,7 @@ main(int argc, char *argv[])
   cfg.port = 5001;
 
   err = mcrx_subscription_new(ctx, &cfg, &sub);
-  if (err < 0) {
+  if (err != 0) {
     fprintf(stderr, "new subscription failed\n");
     mcrx_ctx_unref(ctx);
     return EXIT_FAILURE;
@@ -117,7 +119,7 @@ main(int argc, char *argv[])
   mcrx_ctx_set_wait_ms(ctx, 5000);
 
   err = mcrx_subscription_join(sub);
-  if (err < 0) {
+  if (err != 0) {
     fprintf(stderr, "subscription join failed\n");
     mcrx_subscription_unref(sub);
     mcrx_ctx_unref(ctx);
@@ -126,9 +128,9 @@ main(int argc, char *argv[])
 
   do {
     err = mcrx_ctx_receive_packets(ctx);
-  } while (!err || err == ETIMEDOUT);
+  } while (!err || err == MCRX_ERR_TIMEDOUT);
 
-  if (err != EAGAIN) {
+  if (err != MCRX_ERR_NOTHING_JOINED) {
     fprintf(stderr, "subscription receive failed: %s\n", strerror(err));
     mcrx_subscription_unref(sub);
     mcrx_ctx_unref(ctx);

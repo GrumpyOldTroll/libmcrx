@@ -45,26 +45,48 @@ mcrx_log_null(struct mcrx_ctx *ctx, const char *format, ...) {
   UNUSED(format);
 }
 
-#define mcrx_log_cond(ctx, prio, ...)                                     \
-  do {                                                                       \
-    if (mcrx_ctx_get_log_priority(ctx) >= prio)                               \
-      mcrx_log(ctx, prio, __FILE__, __LINE__, __func__, __VA_ARGS__); \
+#define mcrx_log_cond(ctx, prio, file, line, func, ...)                   \
+  do {                                                                    \
+    if (mcrx_ctx_get_log_priority(ctx) >= prio)                           \
+      mcrx_log(ctx, prio, file, line, func, __VA_ARGS__); \
   } while (0)
+
+#ifdef DISABLE_DEBUG
+#undef DISABLE_DEBUG
+#endif
 
 #ifndef DISABLE_LOGGING
 #ifndef DISABLE_DEBUG
-#define dbg(ctx, ...) mcrx_log_cond(ctx, MCRX_LOGLEVEL_DEBUG, __VA_ARGS__)
+#define dbg_passthru(ctx, file, line, func, ...) mcrx_log_cond(ctx, \
+    MCRX_LOGLEVEL_DEBUG, file, line, func, __VA_ARGS__)
+#define dbg(ctx, ...) dbg_passthru(ctx, __FILE__, __LINE__, __func__, \
+    __VA_ARGS__)
 #else
 #define dbg(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
 #endif
-#define info(ctx, ...) mcrx_log_cond(ctx, MCRX_LOGLEVEL_INFO, __VA_ARGS__)
-#define warn(ctx, ...) mcrx_log_cond(ctx, MCRX_LOGLEVEL_WARNING, __VA_ARGS__)
-#define err(ctx, ...) mcrx_log_cond(ctx, MCRX_LOGLEVEL_ERROR, __VA_ARGS__)
+#define info_passthru(ctx, file, line, func, ...) mcrx_log_cond(ctx, \
+    MCRX_LOGLEVEL_INFO, file, line, func, __VA_ARGS__)
+#define warn_passthru(ctx, file, line, func, ...) mcrx_log_cond(ctx, \
+    MCRX_LOGLEVEL_WARNING, file, line, func, __VA_ARGS__)
+#define err_passthru(ctx, file, line, func, ...) mcrx_log_cond(ctx, \
+    MCRX_LOGLEVEL_ERROR, file, line, func, __VA_ARGS__)
+
+#define info(ctx, ...) info_passthru(ctx, __FILE__, __LINE__, __func__, \
+    __VA_ARGS__)
+#define warn(ctx, ...) warn_passthru(ctx, __FILE__, __LINE__, __func__, \
+    __VA_ARGS__)
+#define err(ctx, ...) err_passthru(ctx, __FILE__, __LINE__, __func__, \
+    __VA_ARGS__)
 #else
 #define dbg(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
 #define info(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
 #define warn(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
 #define err(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
+
+#define dbg_passthru(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
+#define info_passthru(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
+#define warn_passthru(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
+#define err_passthru(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
 #endif
 
 #define MCRX_EXPORT __attribute__((visibility("default")))
@@ -101,7 +123,7 @@ struct mcrx_subscription {
   TAILQ_HEAD(tailhead, mcrx_packet) pkts_head;
   struct mcrx_subscription_config input;
   int sock_fd;
-  void (*receive_cb)(struct mcrx_packet* packet);
+  int (*receive_cb)(struct mcrx_packet* packet);
   int joined;
 };
 
@@ -150,7 +172,7 @@ struct mcrx_ctx {
 #endif
 };
 
-int mcrx_subscription_native_join(
+enum mcrx_error_code mcrx_subscription_native_join(
     struct mcrx_subscription* sub);
 
 int mcrx_prv_add_socket_cb(
@@ -167,5 +189,13 @@ void wrap_strerr(
     int err_no,
     char* buf,
     int len);
+
+enum mcrx_error_code handle_close_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func);
+#define handle_close_error(ctx) handle_close_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
 
 #endif  // GUARD_LIBMCRX_PRIVATE_H_

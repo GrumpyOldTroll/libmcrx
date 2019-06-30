@@ -299,14 +299,14 @@ static int log_priority(
  *
  * Returns: An error code.
  **/
-MCRX_EXPORT int mcrx_ctx_new(
+MCRX_EXPORT enum mcrx_error_code mcrx_ctx_new(
     struct mcrx_ctx **ctxp) {
   const char *env;
   struct mcrx_ctx *c;
 
   c = calloc(1, sizeof(struct mcrx_ctx));
   if (!c) {
-    return -ENOMEM;
+    return MCRX_ERR_NOMEM;
   }
 
   c->refcount = 1;
@@ -332,7 +332,7 @@ MCRX_EXPORT int mcrx_ctx_new(
   // info(c, "version %s context %p created\n", VERSION, (void *)c);
   dbg(c, "log_priority=%d\n", c->log_priority);
   *ctxp = c;
-  return 0;
+  return MCRX_ERR_OK;
 }
 
 /**
@@ -412,7 +412,7 @@ MCRX_EXPORT struct mcrx_ctx *mcrx_ctx_unref(
  *
  * Returns: the current logging priority
  **/
-MCRX_EXPORT int mcrx_ctx_get_log_priority(
+MCRX_EXPORT enum mcrx_log_priority mcrx_ctx_get_log_priority(
     struct mcrx_ctx *ctx) {
   if (ctx == NULL) {
     return LOG_DEBUG;
@@ -430,7 +430,7 @@ MCRX_EXPORT int mcrx_ctx_get_log_priority(
  **/
 MCRX_EXPORT void mcrx_ctx_set_log_priority(
     struct mcrx_ctx *ctx,
-    int priority) {
+    enum mcrx_log_priority priority) {
   if (ctx == NULL) {
     return;
   }
@@ -561,13 +561,14 @@ MCRX_EXPORT struct mcrx_ctx* mcrx_subscription_get_ctx(
   return sub->ctx;
 }
 
-static void default_receive_cb(
+static int default_receive_cb(
     struct mcrx_packet* pkt) {
   struct mcrx_subscription* sub = mcrx_packet_get_subscription(pkt);
   struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
   int len = mcrx_packet_get_contents(pkt, NULL);
   warn(ctx, "sub %p no receive callback set for pkt %p len %d\n", (void*)sub,
       (void*)pkt, len);
+  return MCRX_RECEIVE_CONTINUE;
 }
 
 /**
@@ -580,23 +581,23 @@ static void default_receive_cb(
  *
  * Returns: error code
  **/
-MCRX_EXPORT int mcrx_subscription_new(
+MCRX_EXPORT enum mcrx_error_code mcrx_subscription_new(
     struct mcrx_ctx* ctx,
     const struct mcrx_subscription_config* config,
     struct mcrx_subscription** subp) {
   if (ctx == NULL || config == NULL || subp == NULL) {
     err(ctx, "invalid input: ctx=%p, config=%p, subp=%p\n",
         (void*)ctx, (void*)config, (void*)subp);
-    return -EINVAL;
+    return MCRX_ERR_NULLARG;
   }
 
-  if (config->magic != MCRX_SUBSCRIPTION_INIT_MAGIC) {
+  if (config->magic != MCRX_SUBSCRIPTION_CONFIG_INIT_MAGIC) {
     warn(ctx, "config should be initialized with MCRX_SUBSCRIPTION_INIT\n");
   }
   struct mcrx_subscription* sub;
   sub = calloc(1, sizeof(struct mcrx_subscription));
   if (!sub) {
-    return -ENOMEM;
+    return MCRX_ERR_NOMEM;
   }
 
   sub->ctx = ctx;
@@ -618,14 +619,13 @@ MCRX_EXPORT int mcrx_subscription_new(
   LIST_INSERT_HEAD(&ctx->subs_head, sub, sub_entries);
   info(ctx, "subscription %p created\n", (void *)sub);
   *subp = sub;
-  return 0;
+  return MCRX_ERR_OK;
 }
 
-int mcrx_subscription_set_max_payload(
+void mcrx_subscription_set_max_payload(
     struct mcrx_subscription* sub,
     uint16_t payload_size) {
   sub->max_payload_size = payload_size;
-  return 0;
 }
 
 /**
@@ -634,19 +634,19 @@ int mcrx_subscription_set_max_payload(
  * @receive_cb: receiver callback function
  *
  * Join the (S,G) and pass to user packets received on the given port.
+ * receive_cb should return an enum mcrx_receive_cb_continuation value.
  *
  * Returns: 0 on success -1 and set errno on failure
  **/
-MCRX_EXPORT int mcrx_subscription_set_receive_cb(
+MCRX_EXPORT void mcrx_subscription_set_receive_cb(
     struct mcrx_subscription* sub,
-    void (*receive_cb)(
+    int (*receive_cb)(
       struct mcrx_packet* packet)) {
   if (!receive_cb) {
     sub->receive_cb = default_receive_cb;
   } else {
     sub->receive_cb = receive_cb;
   }
-  return 0;
 }
 
 /**
@@ -658,7 +658,7 @@ MCRX_EXPORT int mcrx_subscription_set_receive_cb(
  *
  * Returns: error code
  **/
-MCRX_EXPORT int mcrx_subscription_join(
+MCRX_EXPORT enum mcrx_error_code mcrx_subscription_join(
     struct mcrx_subscription* sub) {
   return mcrx_subscription_native_join(sub);
 }

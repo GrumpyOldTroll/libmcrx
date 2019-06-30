@@ -23,6 +23,7 @@
 
 #include <stdarg.h>
 #include <netinet/in.h>
+#include <mcrx/errors.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -62,7 +63,7 @@ void mcrx_ctx_set_userdata(
     struct mcrx_ctx *ctx,
     intptr_t userdata);
 
-int mcrx_ctx_new(
+enum mcrx_error_code mcrx_ctx_new(
     struct mcrx_ctx **ctxp);
 
 
@@ -70,7 +71,7 @@ void mcrx_ctx_set_log_fn(
     struct mcrx_ctx *ctx,
     void (*log_fn)(
       struct mcrx_ctx *ctx,
-      int priority,
+      int priority,  // a value from mcrx_log_priority
       const char *file,
       int line,
       const char *fn,
@@ -80,7 +81,7 @@ void mcrx_ctx_set_log_string_fn(
     struct mcrx_ctx *ctx,
     void (*log_fn)(
       struct mcrx_ctx *ctx,
-      int priority,
+      int priority,  // a value from mcrx_log_priority
       const char *file,
       int line,
       const char *fn,
@@ -94,11 +95,11 @@ enum mcrx_log_priority {
   MCRX_LOGLEVEL_DEBUG = 7,    // MCRX_LOG=dbg
 };
 // log priority: LOG_ERR, LOG_WARNING, LOG_INFO, or LOG_DEBUG (syslog.h)
-int mcrx_ctx_get_log_priority(
+enum mcrx_log_priority mcrx_ctx_get_log_priority(
     struct mcrx_ctx *ctx);
 void mcrx_ctx_set_log_priority(
     struct mcrx_ctx *ctx,
-    int priority);
+    enum mcrx_log_priority priority);
 
 /**
  * mcrx_ctx_log_msg:
@@ -113,13 +114,27 @@ void mcrx_ctx_log_msg(
     const char *fn,
     const char* msg);
 
+
 // Default value is 1000+random()%1000
 // like epoll, 0 means don't block, -1 means infinity
 void mcrx_ctx_set_wait_ms(
     struct mcrx_ctx *ctx,
     int timeout_ms);
-int mcrx_ctx_receive_packets(
+
+enum mcrx_error_code mcrx_ctx_receive_packets(
     struct mcrx_ctx *ctx);
+
+enum mcrx_error_code mcrx_ctx_set_receive_socket_handlers(
+    struct mcrx_ctx *ctx,
+    int (*add_socket_cb)(
+        struct mcrx_ctx* ctx,
+        intptr_t handle,
+        int fd,
+        int (*do_receive)(intptr_t handle, int fd)),
+    int (*remove_socket_cb)(
+        struct mcrx_ctx* ctx,
+        int fd));
+
 
 /**
  * mcrx_subscription_addrs_v4:
@@ -174,14 +189,14 @@ struct mcrx_subscription_config {
   uint16_t port;  // in host byte order (.port=255 to get wire=0x00ff)
   uint16_t packet_size;
 };
-#define MCRX_SUBSCRIPTION_INIT_MAGIC 0x42
+#define MCRX_SUBSCRIPTION_CONFIG_INIT_MAGIC 0x42
 // default values
-#define MCRX_SUBSCRIPTION_INIT { \
-  .magic = MCRX_SUBSCRIPTION_INIT_MAGIC, \
+#define MCRX_SUBSCRIPTION_CONFIG_INIT { \
+  .magic = MCRX_SUBSCRIPTION_CONFIG_INIT_MAGIC, \
   .packet_size = 1452 \
 }
 
-int mcrx_subscription_config_pton(
+enum mcrx_error_code mcrx_subscription_config_pton(
     struct mcrx_subscription_config* config,
     const char* source,
     const char* group);
@@ -198,22 +213,27 @@ void mcrx_subscription_set_userdata(
 struct mcrx_ctx* mcrx_subscription_get_ctx(
     struct mcrx_subscription* sub);
 
-int mcrx_subscription_new(
+enum mcrx_error_code mcrx_subscription_new(
     struct mcrx_ctx* ctx,
     const struct mcrx_subscription_config* config,
     struct mcrx_subscription** subp);
 
-int mcrx_subscription_set_receive_cb(
+enum mcrx_receive_cb_continuation {
+  MCRX_RECEIVE_CONTINUE = 0,
+  MCRX_RECEIVE_STOP_FD,
+  MCRX_RECEIVE_STOP_CTX
+};
+void mcrx_subscription_set_receive_cb(
     struct mcrx_subscription* sub,
-    void (*receive_cb)(
+    int (*receive_cb)(
       struct mcrx_packet* packet));
 
-int mcrx_subscription_set_max_payload(
+void mcrx_subscription_set_max_payload(
     struct mcrx_subscription* sub,
     uint16_t payload_size);
-int mcrx_subscription_join(
+enum mcrx_error_code mcrx_subscription_join(
     struct mcrx_subscription* sub);
-int mcrx_subscription_leave(
+enum mcrx_error_code mcrx_subscription_leave(
     struct mcrx_subscription* sub);
 
 struct mcrx_packet* mcrx_packet_ref(
@@ -244,7 +264,7 @@ uint16_t mcrx_packet_get_contents(
  *
  * Returns: 0 on success, nonzero on error.
  */
-int mcrx_subscription_ntop(
+enum mcrx_error_code mcrx_subscription_ntop(
     struct mcrx_subscription* sub,
     char* buf,
     int buflen);

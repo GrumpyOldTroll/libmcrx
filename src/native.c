@@ -85,10 +85,170 @@ MCRX_EXPORT void mcrx_ctx_set_wait_ms(
   ctx->timeout_ms = timeout_ms;
 }
 
-MCRX_EXPORT int mcrx_subscription_ntop(
+// I isolated the handling of various system calls in case I
+// need to refine the error handling better.  At this point,
+// the only goal is to have enough breadcrumbs to debug it if
+// these errors get hit, but it's possible more refined error
+// reporting would become worthwhile.
+static enum mcrx_error_code handle_ntop_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "inet_ntop error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_NTOP;
+}
+#define handle_ntop_error(ctx) handle_ntop_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
+
+static enum mcrx_error_code handle_socket_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "socket() error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_SOCKET;
+}
+#define handle_socket_error(ctx) handle_socket_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
+
+static enum mcrx_error_code handle_connect_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "connect() error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_CONNECT;
+}
+#define handle_connect_error(ctx) handle_connect_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
+
+static enum mcrx_error_code handle_getsockname_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "getsockname() error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_GETSOCKNAME;
+}
+#define handle_getsockname_error(ctx) handle_getsockname_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
+
+enum mcrx_error_code handle_close_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "close() error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_CLOSE;
+}
+
+static enum mcrx_error_code handle_getifaddrs_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "getifaddrs() error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_GETIFADDRS;
+}
+#define handle_getifaddrs_error(ctx) handle_getifaddrs_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
+
+static enum mcrx_error_code handle_recvmsg_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "recvmsg() error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_RECVMSG;
+}
+#define handle_recvmsg_error(ctx) handle_recvmsg_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
+
+static enum mcrx_error_code handle_setsockopt_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "setsockopt() error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_SETSOCKOPT;
+}
+#define handle_setsockopt_error(ctx) handle_setsockopt_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
+
+static enum mcrx_error_code handle_bind_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "bind() error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_BIND;
+}
+#define handle_bind_error(ctx) handle_bind_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
+
+#if USE_JOIN_STRATEGY_FILTER
+static enum mcrx_error_code handle_setsourcefilter_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "setsourcefilter() error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_SETSOURCEFILTER;
+}
+#define handle_setsourcefilter_error(ctx) handle_setsourcefilter_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
+#endif
+
+static enum mcrx_error_code handle_fcntl_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "fcntl() error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_FCNTL;
+}
+#define handle_fcntl_error(ctx) handle_fcntl_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
+
+MCRX_EXPORT enum mcrx_error_code mcrx_subscription_ntop(
     struct mcrx_subscription* sub,
     char* buf,
     int buflen) {
+  struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
   int af;
   const void *src, *grp;
   char src_buf[INET6_ADDRSTRLEN];
@@ -105,30 +265,34 @@ MCRX_EXPORT int mcrx_subscription_ntop(
       grp = &sub->input.addrs.v6.group;
       break;
     default:
-      errno = EINVAL;
-      return -1;
+      err(ctx, "unknown subscription addr_type %d (neither %d nor %d)\n",
+          (int)sub->input.addr_type, (int)MCRX_ADDR_TYPE_V4,
+          (int)MCRX_ADDR_TYPE_V6);
+      return MCRX_ERR_UNKNOWN_FAMILY;
   }
   const char* src_str = inet_ntop(af, src, src_buf, sizeof(src_buf));
   if (src_str == NULL) {
-    return -1;
+    return handle_ntop_error(ctx);
   }
   const char* grp_str = inet_ntop(af, grp, grp_buf, sizeof(grp_buf));
   if (grp_str == NULL) {
-    return -1;
+    return handle_ntop_error(ctx);
   }
   int wrotelen = snprintf(buf, buflen, "%s->%s(%u)",
       src_str, grp_str, sub->input.port);
   if (wrotelen >= buflen) {
-    errno = ENOSPC;
-    return -1;
+    err(ctx, "insufficient subscription_ntop space %d (needed %d)\n",
+        buflen, wrotelen);
+    buf[buflen-1] = 0;
+    return MCRX_ERR_NOSPACE;
   }
-  return 0;
+  return MCRX_ERR_OK;
 }
 
 // int
 // route_main(int argc, char **argv);
 
-static int sockaddr_ntop(
+static enum mcrx_error_code sockaddr_ntop(
     struct mcrx_ctx* ctx,
     const struct sockaddr* sa,
     char* sbuf,
@@ -140,34 +304,27 @@ static int sockaddr_ntop(
       addr = &sp->sin_addr;
       const char* ret = inet_ntop(sa->sa_family, addr, sbuf, buflen);
       if (ret == NULL) {
-        char ebuf[1024];
-        wrap_strerr(errno, ebuf, sizeof(ebuf));
-        err(ctx, "failed inet_ntop: %s\n", ebuf);
-        return -1;
+        return handle_ntop_error(ctx);
       }
-      return 0;
+      return MCRX_ERR_OK;
     }
     case AF_INET6: {
       const struct sockaddr_in6* sp = (const struct sockaddr_in6*)sa;
       addr = &sp->sin6_addr;
       const char* ret = inet_ntop(sa->sa_family, addr, sbuf, buflen);
       if (ret == NULL) {
-        char ebuf[1024];
-        wrap_strerr(errno, ebuf, sizeof(ebuf));
-        err(ctx, "failed inet_ntop: %s\n", ebuf);
-        return -1;
+        return handle_ntop_error(ctx);
       }
-      return 0;
+      return MCRX_ERR_OK;
     }
     default:
-      dbg(ctx, "unknown address family %d (not %d or %d)\n",
+      dbg(ctx, "sockaddr_ntop bad family %d (not %d or %d)\n",
           sa->sa_family, AF_INET, AF_INET6);
-      errno = EINVAL;
-      return -1;
+      return MCRX_ERR_UNKNOWN_FAMILY;
   }
 }
 
-static int mcrx_find_interface(
+static enum mcrx_error_code mcrx_find_interface(
     struct mcrx_subscription* sub,
     int* if_indexp,
     void* if_addr) {
@@ -189,8 +346,6 @@ static int mcrx_find_interface(
    * -jake 2019-06-18
    */
   struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
-  // int x = SIOCGIFINDEX;
-  // printf("%d\n", x);
 
 #if 0
   // if (RTA_DST == 0) if getaddr(RTAX_DST), nrflags |= F_ISHOST
@@ -342,19 +497,16 @@ static int mcrx_find_interface(
       break;
     }
     default:
-      err(ctx, "sub %p internal error: unknown type\n", (void*)sub);
-      return -EINVAL;
+      err(ctx, "sub %p internal error: unknown address family\n", (void*)sub);
+      return MCRX_ERR_UNKNOWN_FAMILY;
   }
 
   // extract the local interface by connecting a udp socket to the
   // source and checking its local address.
   int check_sock = socket(family, SOCK_DGRAM, IPPROTO_UDP);
   if (check_sock < 0) {
-    char buf[1024];
-    wrap_strerr(errno, buf, sizeof(buf));
-    err(ctx, "sub %p socket failed: %s\n",
-        (void*)sub, buf);
-    return -EINVAL;
+    err(ctx, "sub %p socket() failed\n", (void*)sub);
+    return handle_socket_error(ctx);
   }
   info(ctx, "sub %p interface lookup socket created: %d\n",
       (void*)sub, check_sock);
@@ -362,36 +514,37 @@ static int mcrx_find_interface(
   int rc;
   rc = connect(check_sock, sp, sa_len);
   if (rc < 0) {
-    char buf[1024];
-    wrap_strerr(errno, buf, sizeof(buf));
-    err(ctx, "sub %p connect failed(%d): %s\n",
-        (void*)sub, rc, buf);
-    close(check_sock);
-    return -EINVAL;
+    err(ctx, "sub %p connect() failed\n", (void*)sub);
+    return handle_connect_error(ctx);
   }
 
   socklen_t got_len = sizeof(ss);
   rc = getsockname(check_sock, sp, &got_len);
   if (rc < 0) {
-    char buf[1024];
-    wrap_strerr(errno, buf, sizeof(buf));
-    err(ctx, "sub %p getsockname failed: %s\n",
-        (void*)sub, buf);
-    close(check_sock);
-    return -EINVAL;
+    enum mcrx_error_code ret = handle_getsockname_error(ctx);
+    int prev_errno = errno;
+    if (close(check_sock) < 0) {
+      handle_close_error(ctx);
+    }
+    errno = prev_errno;  // suppress close error, if present.
+    return ret;
   }
 
   if (got_len != (socklen_t)sa_len) {
     err(ctx, "sub %p getsockname addrlen got %d not %d\n",
         (void*)sub, got_len, sa_len);
-    close(check_sock);
-    return -EINVAL;
+    if (close(check_sock) < 0) {
+      handle_close_error(ctx);
+    }
+    return MCRX_ERR_INTERNAL_ERROR;
   }
   rc = close(check_sock);
   if (rc < 0) {
     char buf[1024];
     wrap_strerr(errno, buf, sizeof(buf));
-    warn(ctx, "sub %p close(%d) errored(ignoring): %s\n",
+    // we ignore this error because sometimes we're handed fd=0, as the
+    // socket fd, which produces a close error on mac. --jake 2019-06-28
+    warn(ctx, "sub %p ignoring source-if socket close(%d) error: %s\n",
         (void*)sub, check_sock, buf);
   }
 
@@ -406,9 +559,7 @@ static int mcrx_find_interface(
   const char* loc_addr_str = inet_ntop(family, addr_p, addr_buf,
       sizeof(addr_buf));
   if (!loc_addr_str) {
-    err(ctx, "sub %p inet_ntop failed\n",
-        (void*)sub);
-    return -EINVAL;
+    return handle_ntop_error(ctx);
   }
 
   info(ctx, "got local sockaddr: %s\n", loc_addr_str);
@@ -416,11 +567,7 @@ static int mcrx_find_interface(
   struct ifaddrs* all_addrs = 0;
   rc = getifaddrs(&all_addrs);
   if (rc < 0) {
-    char buf[1024];
-    wrap_strerr(errno, buf, sizeof(buf));
-    err(ctx, "sub %p getifaddrs failed: %s\n",
-        (void*)sub, buf);
-    return -EINVAL;
+    return handle_getifaddrs_error(ctx);
   }
 
   struct ifaddrs* cur_ifa;
@@ -449,19 +596,25 @@ static int mcrx_find_interface(
       }
     }
 
-    char ifa_buf[INET6_ADDRSTRLEN];
-    const char* ifa_s = "null_addr";
-    if (cur_ifa->ifa_addr) {
-      rc = sockaddr_ntop(ctx, cur_ifa->ifa_addr, ifa_buf, sizeof(ifa_buf));
-      ifa_s = &ifa_buf[0];
-      if (rc != 0) {
-        snprintf(ifa_buf, sizeof(ifa_buf),
-            "failed_sockntop(af=%d, vs. %d/%d)\n",
-            cur_ifa->ifa_addr->sa_family, AF_INET, AF_INET6);
+    if (mcrx_ctx_get_log_priority(ctx) >= MCRX_LOGLEVEL_DEBUG) {
+      char ifa_buf[INET6_ADDRSTRLEN];
+      const char* ifa_s = "null_addr";
+      if (cur_ifa->ifa_addr) {
+        rc = sockaddr_ntop(ctx, cur_ifa->ifa_addr, ifa_buf, sizeof(ifa_buf));
+        if (rc == MCRX_ERR_UNKNOWN_FAMILY) {
+          ifa_s = "unknown addr type";
+        } else {
+          ifa_s = &ifa_buf[0];
+          if (rc != 0) {
+            snprintf(ifa_buf, sizeof(ifa_buf),
+                "failed_sockntop(af=%d, vs. %d/%d)\n",
+                cur_ifa->ifa_addr->sa_family, AF_INET, AF_INET6);
+          }
+        }
       }
+      dbg(ctx, "   ifa %s: %s\n",
+          cur_ifa->ifa_name, ifa_s);
     }
-    dbg(ctx, "   ifa %s: %s\n",
-        cur_ifa->ifa_name, ifa_s);
   }
   int found = 0;
   if (match_ifa) {
@@ -527,9 +680,18 @@ static int mcrx_find_interface(
         idx, sub_sbuf);
   }
 
-  return 0;
+  return MCRX_ERR_OK;
 }
 
+/**
+ * native_receive:
+ *
+ * Receives all pending packets for a subscription, unless the receive
+ * callback requests an early stop or there's a socket error.
+ *
+ * Returns value from mcrx_receive_cb_continuation, or whatever
+ * receive_cb returned (which should be that, but unchecked here.)
+ */
 static int native_receive(
     intptr_t sub_handle,
     int fd) {
@@ -545,10 +707,10 @@ static int native_receive(
     struct mcrx_packet *pkt = (struct mcrx_packet*)calloc(1,
         sizeof(struct mcrx_packet)+sub->max_payload_size);
     if (!pkt) {
-      errno = ENOMEM;
+      err(ctx, "out of memory allocating packet\n");
       mcrx_subscription_unref(sub);
       mcrx_ctx_unref(ctx);
-      return -1;
+      return MCRX_RECEIVE_STOP_CTX;
     }
 
     struct iovec iov;
@@ -569,12 +731,14 @@ static int native_receive(
           free(pkt);
           mcrx_subscription_unref(sub);
           mcrx_ctx_unref(ctx);
-          return 0;
+          return MCRX_RECEIVE_STOP_FD;
         default:
           free(pkt);
+          err(ctx, "sub %p recvmsg failed\n", (void*)sub);
           mcrx_subscription_unref(sub);
           mcrx_ctx_unref(ctx);
-          return -1;
+          handle_recvmsg_error(ctx);
+          return MCRX_RECEIVE_STOP_CTX;
       }
     }
     pkt->sub = sub;
@@ -587,35 +751,46 @@ static int native_receive(
     }
     TAILQ_INSERT_TAIL(&sub->pkts_head, pkt, pkt_entries);
 
-    sub->receive_cb(pkt);
+    int rcb_ret = sub->receive_cb(pkt);
+    if (rcb_ret != MCRX_RECEIVE_CONTINUE) {
+      mcrx_subscription_unref(sub);
+      mcrx_ctx_unref(ctx);
+      return rcb_ret;
+    }
   } while (1);
 
   mcrx_subscription_unref(sub);
   mcrx_ctx_unref(ctx);
-  return 0;
+  return MCRX_ERR_OK;
 }
 
-int mcrx_subscription_native_join(
+enum mcrx_error_code mcrx_subscription_native_join(
     struct mcrx_subscription* sub) {
   struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
   if (sub == NULL || ctx == NULL) {
     err(ctx, "NULL sub(%p) or ctx(%p)\n", (void*)sub, (void*)ctx);
-    return -EINVAL;
+    return MCRX_ERR_NULLARG;
   }
 
   char desc[MCRX_SUB_STRLEN];
-  if (mcrx_subscription_ntop(sub, desc, sizeof(desc)) != 0) {
-    char buf[1024];
-    wrap_strerr(errno, buf, sizeof(buf));
-    err(ctx, "sub %p wrap_strerr failed: %s\n", (void*)sub, buf);
-    return -EINVAL;
+  enum mcrx_error_code ret;
+  ret = mcrx_subscription_ntop(sub, desc, sizeof(desc));
+  if (ret != MCRX_ERR_OK) {
+    err(ctx, "sub %p description gen mcrx_subscription_ntop failed\n",
+        (void*)sub);
+    return ret;
+  }
+
+  if (sub->joined) {
+    err(ctx, "sub %p (%s) already joined\n", (void*)sub, desc);
+    return MCRX_ERR_ALREADY_JOINED;
   }
 
   int family;
   if (sub->input.addr_type != MCRX_ADDR_TYPE_V4 &&
       sub->input.addr_type != MCRX_ADDR_TYPE_V6) {
       err(ctx, "sub %p (%s) address type not set\n", (void*)sub, desc);
-      return -EINVAL;
+      return MCRX_ERR_UNKNOWN_FAMILY;
   } else if (sub->input.addr_type == MCRX_ADDR_TYPE_V4) {
     family = AF_INET;
   } else {
@@ -625,10 +800,8 @@ int mcrx_subscription_native_join(
   int rc;
   int sock_fd = socket(family, SOCK_DGRAM, IPPROTO_UDP);
   if (sock_fd < 0) {
-    char buf[1024];
-    wrap_strerr(errno, buf, sizeof(buf));
-    err(ctx, "sub %p (%s) socket failed: %s\n", (void*)sub, buf, desc);
-    return -EBADF;
+    err(ctx, "sub %p (%s) listening socket failed\n", (void*)sub, desc);
+    return handle_socket_error(ctx);
   }
   if (sock_fd == 0) {
     // fd=0 usually is stdin, but in some apps that close stdin or reassign it,
@@ -637,30 +810,39 @@ int mcrx_subscription_native_join(
     // fails with strerror providing "Bad file descriptor".  It's not fully
     // clear that all other functions work properly with a 0 fd.
     // Therefore, insist on a nonzero socket by opening a new socket in the
-    // event of a 0.
+    // event of a 0 file descriptor. --jake 2019-06-24
     int alt_fd = socket(family, SOCK_DGRAM, IPPROTO_UDP);
     if (alt_fd < 0) {
-      char buf[1024];
-      wrap_strerr(errno, buf, sizeof(buf));
-      err(ctx, "sub %p (%s) socket failed (after 0): %s\n", (void*)sub, buf,
-          desc);
-      return -EBADF;
+      err(ctx, "sub %p (%s) alt listening socket failed\n", (void*)sub, desc);
+      int prev_errno = errno;
+      ret = handle_socket_error(ctx);
+      if (close(sock_fd) < 0) {
+        handle_close_error(ctx);
+      }
+      errno = prev_errno;  // suppress close's errno
+      return ret;
     }
     rc = close(sock_fd);
     if (rc < 0) {
       char buf[1024];
       wrap_strerr(errno, buf, sizeof(buf));
       warn(ctx,
-          "sub %p (%s) close of socket(0) failed (replaced with %d): %s\n",
-          (void*)sub, buf, alt_fd, desc);
+          "sub %p (%s) ignoring socket=0 close fail (replaced with %d): %s\n",
+          (void*)sub, desc, alt_fd, buf);
     }
     if (alt_fd == 0) {
-      char buf[1024];
-      wrap_strerr(errno, buf, sizeof(buf));
-      err(ctx, "sub %p (%s) socket failed (re-zero after 0): %s\n",
-          (void*)sub, buf, desc);
-      close(alt_fd);
-      return -EBADF;
+      // our assumptions are violated here, we got another 0 value for
+      // fd while trying to insist on a nonzero fd, and a prior 0-valued
+      // fd was open.  Call it a socket failure.
+      err(ctx, "sub %p (%s) socket failed (re-zero after 0)\n",
+          (void*)sub, desc);
+      int prev_errno = errno;
+      ret = handle_socket_error(ctx);
+      if (close(alt_fd) < 0) {
+        handle_close_error(ctx);
+      }
+      errno = prev_errno;  // suppress close's errno
+      return ret;
     }
     sock_fd = alt_fd;
   }
@@ -672,12 +854,15 @@ int mcrx_subscription_native_join(
   len = sizeof(val);
   rc = setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &val, len);
   if (rc < 0) {
-    char buf[1024];
-    wrap_strerr(errno, buf, sizeof(buf));
-    err(ctx, "sub %p (%s) setsockopt(REUSEADDR) failed: %s\n", (void*)sub,
-        desc, buf);
-    close(sock_fd);
-    return -EBADF;
+    err(ctx, "sub %p (%s) setsockopt(REUSEADDR) failed\n", (void*)sub,
+        desc);
+    int prev_errno = errno;
+    ret = handle_setsockopt_error(ctx);
+    if (close(sock_fd) < 0) {
+      handle_close_error(ctx);
+    }
+    errno = prev_errno;  // suppress close's errno
+    return ret;
   }
 
   /*
@@ -689,7 +874,7 @@ int mcrx_subscription_native_join(
     struct in_addr i4;
   } if_addr;
   void* if_addrp;
-  int if_idx;
+  int if_idx = -1;
   switch (sub->input.addr_type) {
     case MCRX_ADDR_TYPE_V4:
       if_addrp = &if_addr.i4;
@@ -698,17 +883,22 @@ int mcrx_subscription_native_join(
       if_addrp = &if_addr.i4;
       break;
     default:
-      err(ctx, "sub %p (%s) internal error: unknown type picking interface\n",
+      err(ctx,
+          "sub %p (%s) internal error: unknown family for source interface\n",
           (void*)sub, desc);
-      close(sock_fd);
-      return -EBADF;
+      if (close(sock_fd) < 0) {
+        handle_close_error(ctx);
+      }
+      return MCRX_ERR_UNKNOWN_FAMILY;
   }
 
-  rc = mcrx_find_interface(sub, &if_idx, if_addrp);
-  if (rc != 0) {
+  ret = mcrx_find_interface(sub, &if_idx, if_addrp);
+  if (ret != MCRX_ERR_OK) {
     err(ctx, "sub %p (%s) could not find interface\n", (void*)sub, desc);
-    close(sock_fd);
-    return -EBADF;
+    if (close(sock_fd) < 0) {
+      handle_close_error(ctx);
+    }
+    return ret;
   }
 
   /*
@@ -778,23 +968,28 @@ int mcrx_subscription_native_join(
       rc = bind(sock_fd, (struct sockaddr*)(&sin4_group),
           sizeof(struct sockaddr_in));
       if (rc < 0) {
-        char buf[1024];
-        wrap_strerr(errno, buf, sizeof(buf));
-        err(ctx, "sub %p (%s) bind failed: %s\n", (void*)sub, desc, buf);
-        close(sock_fd);
-        return -EBADF;
+        int prev_errno = errno;
+        ret = handle_bind_error(ctx);
+        if (close(sock_fd) < 0) {
+          handle_close_error(ctx);
+        }
+        errno = prev_errno;  // suppress close's errno
+        return ret;
       }
 
 #if USE_JOIN_STRATEGY_FILTER
       rc = setsourcefilter(sock_fd, if_idx, (struct sockaddr*)&sin4_group,
           sizeof(struct sockaddr_in), MCAST_INCLUDE, 1, &sinss_source);
       if (rc < 0) {
-        char buf[1024];
-        wrap_strerr(errno, buf, sizeof(buf));
-        err(ctx, "sub %p (%s) setsourcefilter failed: %s\n", (void*)sub,
-            desc, buf);
-        close(sock_fd);
-        return -EBADF;
+        err(ctx, "sub %p (%s) setsourcefilter failed\n", (void*)sub,
+            desc);
+        int prev_errno = errno;
+        ret = handle_setsourcefilter_error(ctx);
+        if (close(sock_fd) < 0) {
+          handle_close_error(ctx);
+        }
+        errno = prev_errno;  // suppress close's errno
+        return ret;
       }
 #elif USE_JOIN_STRATEGY_ADDMEM
       struct ip_mreq_source mreq;
@@ -805,14 +1000,16 @@ int mcrx_subscription_native_join(
       rc = setsockopt(sock_fd, IPPROTO_IP, IP_ADD_SOURCE_MEMBERSHIP,
           &mreq, sizeof(mreq));
       if (rc < 0) {
-        char buf[1024];
-        wrap_strerr(errno, buf, sizeof(buf));
         err(ctx,
-            "sub %p (%s) setsockopt(IP_ADD_SOURCE_MEMBERSHIP) failed: %s\n",
-            (void*)sub,
-            desc, buf);
-        close(sock_fd);
-        return -EBADF;
+            "sub %p (%s) setsockopt(IP_ADD_SOURCE_MEMBERSHIP) failed\n",
+            (void*)sub, desc);
+        int prev_errno = errno;
+        ret = handle_setsockopt_error(ctx);
+        if (close(sock_fd) < 0) {
+          handle_close_error(ctx);
+        }
+        errno = prev_errno;  // suppress close's errno
+        return ret;
       }
 #elif USE_JOIN_STRATEGY_MCAST_JOIN
       struct group_source_req gsreq;
@@ -831,14 +1028,16 @@ int mcrx_subscription_native_join(
       rc = setsockopt(sock_fd, IPPROTO_IP, MCAST_JOIN_SOURCE_GROUP, &gsreq,
           sizeof(gsreq));
       if (rc < 0) {
-        char buf[1024];
-        wrap_strerr(errno, buf, sizeof(buf));
         err(ctx,
-            "sub %p (%s) setsockopt(MCAST_JOIN_SOURCE_GROUP) failed: %s\n",
-            (void*)sub,
-            desc, buf);
-        close(sock_fd);
-        return -EBADF;
+            "sub %p (%s) setsockopt(MCAST_JOIN_SOURCE_GROUP) failed\n",
+            (void*)sub, desc);
+        int prev_errno = errno;
+        ret = handle_setsockopt_error(ctx);
+        if (close(sock_fd) < 0) {
+          handle_close_error(ctx);
+        }
+        errno = prev_errno;  // suppress close's errno
+        return ret;
       }
 #endif
       break;
@@ -860,23 +1059,28 @@ int mcrx_subscription_native_join(
       rc = bind(sock_fd, (struct sockaddr*)(&sin6_group),
           sizeof(struct sockaddr_in6));
       if (rc < 0) {
-        char buf[1024];
-        wrap_strerr(errno, buf, sizeof(buf));
-        err(ctx, "sub %p (%s) bind failed: %s\n", (void*)sub, desc, buf);
-        close(sock_fd);
-        return -EBADF;
+        int prev_errno = errno;
+        ret = handle_bind_error(ctx);
+        if (close(sock_fd) < 0) {
+          handle_close_error(ctx);
+        }
+        errno = prev_errno;  // suppress close's errno
+        return ret;
       }
 
 #if USE_JOIN_STRATEGY_FILTER
       rc = setsourcefilter(sock_fd, if_idx, (struct sockaddr*)&sin6_group,
           sizeof(struct sockaddr_in6), MCAST_INCLUDE, 1, &sinss_source);
       if (rc < 0) {
-        char buf[1024];
-        wrap_strerr(errno, buf, sizeof(buf));
-        err(ctx, "sub %p (%s) setsourcefilter failed: %s\n", (void*)sub,
-            desc, buf);
-        close(sock_fd);
-        return -EBADF;
+        err(ctx, "sub %p (%s) setsourcefilter failed\n", (void*)sub,
+            desc);
+        int prev_errno = errno;
+        ret = handle_setsourcefilter_error(ctx);
+        if (close(sock_fd) < 0) {
+          handle_close_error(ctx);
+        }
+        errno = prev_errno;  // suppress close's errno
+        return ret;
       }
 #elif USE_JOIN_STRATEGY_ADDMEM
   #ifndef BROKEN_ADD_MEMBERSHIP_V6
@@ -889,18 +1093,23 @@ int mcrx_subscription_native_join(
       rc = setsockopt(sock_fd, IPPROTO_IP, IPV6_ADD_SOURCE_MEMBERSHIP,
           &mreq, sizeof(mreq));
       if (rc < 0) {
-        char buf[1024];
-        wrap_strerr(errno, buf, sizeof(buf));
         err(ctx,
-            "sub %p (%s) setsockopt(IP_ADD_SOURCE_MEMBERSHIP) failed: %s\n",
-            (void*)sub, desc, buf);
-        close(sock_fd);
-        return -EBADF;
+            "sub %p (%s) setsockopt(IPV6_ADD_SOURCE_MEMBERSHIP) failed: %s\n",
+            (void*)sub, desc);
+        int prev_errno = errno;
+        ret = handle_setsockopt_error(ctx);
+        if (close(sock_fd) < 0) {
+          handle_close_error(ctx);
+        }
+        errno = prev_errno;  // suppress close's errno
+        return ret;
       }
   #else
       err(ctx, "sub %p (%s) unimplemented join(s,g)\n", (void*)sub, desc);
-      close(sock_fd);
-      return -ENOTSUP;
+      if (close(sock_fd) < 0) {
+        handle_close_error(ctx);
+      }
+      return MCRX_ERR_UNSUPPORTED;
   #endif
 #elif USE_JOIN_STRATEGY_MCAST_JOIN
       struct group_source_req gsreq;
@@ -919,13 +1128,16 @@ int mcrx_subscription_native_join(
       rc = setsockopt(sock_fd, IPPROTO_IPV6, MCAST_JOIN_SOURCE_GROUP, &gsreq,
           sizeof(gsreq));
       if (rc < 0) {
-        char buf[1024];
-        wrap_strerr(errno, buf, sizeof(buf));
         err(ctx,
-            "sub %p (%s) setsockopt(MCAST_JOIN_SOURCE_GROUP) failed: %s\n",
-            (void*)sub, desc, buf);
-        close(sock_fd);
-        return -EBADF;
+            "sub %p (%s) setsockopt(MCAST_JOIN_SOURCE_GROUP) failed\n",
+            (void*)sub, desc);
+        int prev_errno = errno;
+        ret = handle_setsockopt_error(ctx);
+        if (close(sock_fd) < 0) {
+          handle_close_error(ctx);
+        }
+        errno = prev_errno;  // suppress close's errno
+        return ret;
       }
 #endif
       break;
@@ -933,8 +1145,10 @@ int mcrx_subscription_native_join(
     default:
       err(ctx, "sub %p (%s) internal error, invalid addr_type\n", (void*)sub,
           desc);
-      close(sock_fd);
-      return -EINVAL;
+      if (close(sock_fd) < 0) {
+        handle_close_error(ctx);
+      }
+      return MCRX_ERR_UNKNOWN_FAMILY;
   }
 /*
   char bound_ifname[IFNAMSZ];
@@ -953,25 +1167,31 @@ int mcrx_subscription_native_join(
 
   val = fcntl(sock_fd, F_GETFL, 0);
   if (val < 0) {
-    char buf[1024];
-    wrap_strerr(errno, buf, sizeof(buf));
-    err(ctx, "sub %p (%s) fcntl(F_GETFL) failed: %s\n", (void*)sub, desc, buf);
-    close(sock_fd);
-    return -EBADF;
+    err(ctx, "sub %p (%s) fcntl(F_GETFL) failed\n", (void*)sub, desc);
+    int prev_errno = errno;
+    ret = handle_fcntl_error(ctx);
+    if (close(sock_fd) < 0) {
+      handle_close_error(ctx);
+    }
+    errno = prev_errno;  // suppress close's errno
+    return ret;
   }
 
   rc = fcntl(sock_fd, F_SETFL, val | O_NONBLOCK);
   if (rc < 0) {
-    char buf[1024];
-    wrap_strerr(errno, buf, sizeof(buf));
-    err(ctx, "sub %p (%s) fcntl(F_GETFL) failed: %s\n", (void*)sub, desc, buf);
-    close(sock_fd);
-    return -EBADF;
+    err(ctx, "sub %p (%s) fcntl(F_SETFL) failed\n", (void*)sub, desc);
+    int prev_errno = errno;
+    ret = handle_fcntl_error(ctx);
+    if (close(sock_fd) < 0) {
+      handle_close_error(ctx);
+    }
+    errno = prev_errno;  // suppress close's errno
+    return ret;
   }
 
   if (!ctx->add_socket_cb) {
     err(ctx, "sub %p (%s) no add_socket_cb\n", (void*)sub, desc);
-    return -EINVAL;
+    return MCRX_ERR_INTERNAL_ERROR;
   }
   sub->sock_fd = sock_fd;
   sub->joined = 1;
@@ -982,21 +1202,24 @@ int mcrx_subscription_native_join(
   mcrx_ctx_ref(ctx);
   mcrx_subscription_ref(sub);
   rc = ctx->add_socket_cb(ctx, (intptr_t)sub, sock_fd, native_receive);
-  if (rc < 0) {
-    char buf[1024];
-    wrap_strerr(errno, buf, sizeof(buf));
-    err(ctx, "sub %p (%s) add_fd() failed: %s\n", (void*)sub, desc, buf);
-    close(sock_fd);
+  if (rc != 0) {
+    err(ctx, "sub %p (%s) add_socket_cb() failed\n",
+        (void*)sub, desc);
+    int prev_errno = errno;
+    if (close(sock_fd) < 0) {
+      handle_close_error(ctx);
+    }
+    errno = prev_errno;  // suppress close error
     sub->sock_fd = -1;
     sub->joined = 0;
     mcrx_subscription_unref(sub);
     mcrx_ctx_unref(ctx);
-    return -EBADF;
+    return MCRX_ERR_CALLBACK_FAILED;
   }
   mcrx_subscription_unref(sub);
   mcrx_ctx_unref(ctx);
 
-  return 0;
+  return MCRX_ERR_OK;
 }
 
 /**
@@ -1007,7 +1230,7 @@ int mcrx_subscription_native_join(
  *
  * Returns: error code
  **/
-MCRX_EXPORT int mcrx_subscription_leave(
+MCRX_EXPORT enum mcrx_error_code mcrx_subscription_leave(
     struct mcrx_subscription* sub) {
   struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
   if (!sub || !ctx) {
@@ -1016,11 +1239,17 @@ MCRX_EXPORT int mcrx_subscription_leave(
     } else {
       err(ctx, "mcrx_subscription_leave with detached sub\n");
     }
-    return -EINVAL;
+    return MCRX_ERR_NULLARG;
+  }
+  if (!sub->joined) {
+    err(ctx, "mcrx_subscription_leave with unjoined subscription %p\n",
+        (void*)sub);
+    return MCRX_ERR_ALREADY_NOTJOINED;
   }
   if (sub->sock_fd < 0) {
-    err(ctx, "mcrx_subscription_leave with closed socket\n");
-    return -EINVAL;
+    err(ctx, "mcrx_subscription_leave with bad socket %d\n",
+        sub->sock_fd);
+    return MCRX_ERR_INTERNAL_ERROR;  // should only be possible when not joined
   }
   char desc[MCRX_SUB_STRLEN];
   if (mcrx_subscription_ntop(sub, desc, sizeof(desc)) != 0) {
@@ -1028,10 +1257,12 @@ MCRX_EXPORT int mcrx_subscription_leave(
   }
   if (!ctx->remove_socket_cb) {
     err(ctx, "sub %p (%s) no remove_socket_cb\n", (void*)sub, desc);
-    close(sub->sock_fd);
+    if (close(sub->sock_fd) < 0) {
+      handle_close_error(ctx);
+    }
     sub->sock_fd = -1;
     sub->joined = 0;
-    return -EINVAL;
+    return MCRX_ERR_INTERNAL_ERROR;  // api should enforce non-null cb
   }
   // keep ctx alive if callback unrefs
   mcrx_ctx_ref(ctx);
@@ -1040,22 +1271,21 @@ MCRX_EXPORT int mcrx_subscription_leave(
 
   int rc = close(sub->sock_fd);
   if (rc < 0) {
-    char buf[1024];
-    wrap_strerr(errno, buf, sizeof(buf));
-    err(ctx, "sub %p (%s) close(%d) failed: %s\n", (void*)sub, desc,
-        sub->sock_fd, buf);
+    err(ctx, "sub %p (%s) close(%d) failed\n", (void*)sub, desc,
+        sub->sock_fd);
+    handle_close_error(ctx);
     sub->sock_fd = -1;
     sub->joined = 0;
     mcrx_subscription_unref(sub);
     mcrx_ctx_unref(ctx);
-    return -EBADF;
+    return MCRX_ERR_SYSCALL_CLOSE;
   }
   sub->sock_fd = -1;
   sub->joined = 0;
   info(ctx, "sub %p (%s) unsubscribed\n", (void*)sub, desc);
   mcrx_subscription_unref(sub);
   mcrx_ctx_unref(ctx);
-  return 0;
+  return MCRX_ERR_OK;
 }
 
 /**
@@ -1066,9 +1296,10 @@ MCRX_EXPORT int mcrx_subscription_leave(
  *
  * Fill config addresses and addr_type, ensure the address families match.
  *
- * Returns: 0 on success, -1 on error.
+ * Returns: MCRX_ERR_UNKNOWN_FAMILY on error.  errno may or may not be
+ * instructive, because both v4 and v6 are tried.
  **/
-MCRX_EXPORT int mcrx_subscription_config_pton(
+MCRX_EXPORT enum mcrx_error_code mcrx_subscription_config_pton(
     struct mcrx_subscription_config* config,
     const char* source,
     const char* group) {
@@ -1078,7 +1309,7 @@ MCRX_EXPORT int mcrx_subscription_config_pton(
     ret = inet_pton(AF_INET, group, &config->addrs.v4.group);
     if (ret > 0) {
       config->addr_type = MCRX_ADDR_TYPE_V4;
-      return 0;
+      return MCRX_ERR_OK;
     }
   }
 
@@ -1087,10 +1318,10 @@ MCRX_EXPORT int mcrx_subscription_config_pton(
     ret = inet_pton(AF_INET6, group, &config->addrs.v6.group);
     if (ret > 0) {
       config->addr_type = MCRX_ADDR_TYPE_V6;
-      return 0;
+      return MCRX_ERR_OK;
     }
   }
 
   config->addr_type = MCRX_ADDR_TYPE_UNKNOWN;
-  return -1;
+  return MCRX_ERR_UNKNOWN_FAMILY;
 }

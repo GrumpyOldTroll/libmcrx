@@ -39,6 +39,39 @@ struct mcrx_fd_handle {
 #if MCRX_PRV_USE_KEVENT
 #include <sys/event.h>
 
+// I isolated the handling of various system calls in case I
+// need to refine the error handling better.  At this point,
+// the only goal is to have enough breadcrumbs to debug it if
+// these errors get hit, but it's possible more refined error
+// reporting would become worthwhile.
+static enum mcrx_error_code handle_kevent_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "kevent error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_KEVENT;
+}
+#define handle_kevent_error(ctx) handle_kevent_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
+
+static enum mcrx_error_code handle_kqueue_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "kqueue error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_KQUEUE;
+}
+#define handle_kqueue_error(ctx) handle_kqueue_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
+
 /**
  * mcrx_ctx_receive_packets
  * @ctx: mcrx library context
@@ -50,7 +83,7 @@ struct mcrx_fd_handle {
  *
  * Returns: error code on problem, EAGAIN if timeout reached
  */
-MCRX_EXPORT int mcrx_ctx_receive_packets(
+MCRX_EXPORT enum mcrx_error_code mcrx_ctx_receive_packets(
     struct mcrx_ctx *ctx) {
   if (ctx->nevents == 0) {
     if (ctx->triggered != NULL) {
@@ -61,6 +94,7 @@ MCRX_EXPORT int mcrx_ctx_receive_packets(
         close(ctx->wait_fd);
         ctx->wait_fd = -1;
       }
+      return MCRX_ERR_NOTHING_JOINED;
     } else {
       warn(ctx, "waiting again for packets with no listeners\n");
       if (ctx->timeout_ms > 0) {
@@ -70,16 +104,14 @@ MCRX_EXPORT int mcrx_ctx_receive_packets(
         usleep(1000);
       }
     }
-    return EAGAIN;
+    return MCRX_ERR_NOTHING_JOINED;
   }
   if (ctx->wait_fd == -1) {
     int fd = kqueue();
     if (fd < 0) {
-      char buf[1024];
-      wrap_strerr(errno, buf, sizeof(buf));
-      err(ctx, "failed kqueue: %s\n", buf);
-      return errno;
+      return handle_kqueue_error(ctx);
     }
+    dbg(ctx, "created kqueue fd=%d\n", fd);
     ctx->wait_fd = fd;
   }
   if (ctx->nevents != ctx->ntriggered) {
@@ -87,9 +119,8 @@ MCRX_EXPORT int mcrx_ctx_receive_packets(
       ctx->triggered = (struct kevent*)calloc(ctx->nevents,
           sizeof(struct kevent));
       if (!ctx->triggered) {
-        errno = ENOMEM;
         err(ctx, "failed to alloc %d events\n", ctx->nevents);
-        return ENOMEM;
+        return MCRX_ERR_NOMEM;
       }
       ctx->ntriggered = ctx->nevents;
     } else {
@@ -114,16 +145,16 @@ MCRX_EXPORT int mcrx_ctx_receive_packets(
     tm.tv_nsec = (ctx->timeout_ms % 1000) * 1000000;
     ptm = &tm;
   }
+  dbg(ctx, "waiting, trigger space=%u event space=%u\n",
+      ctx->ntriggered, ctx->nevents);
   int nevents = kevent(ctx->wait_fd, ctx->events, ctx->nevents,
       ctx->triggered, ctx->ntriggered, ptm);
   dbg(ctx, "%d events from %u changes, %u trigger space\n",
       nevents, ctx->nevents, ctx->ntriggered);
 
   if (nevents < 0) {
-    char buf[1024];
-    wrap_strerr(errno, buf, sizeof(buf));
-    err(ctx, "failed kevent(%d): %s\n", ctx->wait_fd, buf);
-    return errno;
+    err(ctx, "ctx %p failed kevent(%d)\n", (void*)ctx, ctx->wait_fd);
+    return handle_kevent_error(ctx);
   }
 
   u_int idx;
@@ -140,7 +171,7 @@ MCRX_EXPORT int mcrx_ctx_receive_packets(
 
   if (nevents == 0) {
     dbg(ctx, "no events fired--timed out? %d\n", ctx->timeout_ms);
-    return ETIMEDOUT;
+    return MCRX_ERR_TIMEDOUT;
   }
 
   // keep ctx alive regardless of what happens during callbacks.
@@ -168,10 +199,15 @@ MCRX_EXPORT int mcrx_ctx_receive_packets(
     }
     dbg(ctx, "fired event, fd=%d, flags=%x, fflags=%x\n", fd, evt->flags,
         evt->fflags);
-    handle->handle_cb(handle->handle, fd);
+    int rc = handle->handle_cb(handle->handle, fd);
+    if (rc != MCRX_RECEIVE_CONTINUE) {
+      if (rc == MCRX_RECEIVE_STOP_CTX) {
+        break;
+      }
+    }
   }
   mcrx_ctx_unref(ctx);
-  return 0;
+  return MCRX_ERR_OK;
 }
 
 int mcrx_prv_add_socket_cb(
@@ -184,24 +220,24 @@ int mcrx_prv_add_socket_cb(
   if (!ctx) {
     errno = EINVAL;
     err(ctx, "add_socket_cb with no ctx\n");
-    return -1;
+    return MCRX_ERR_INTERNAL_ERROR;
   }
   if (!handle_cb) {
     errno = EINVAL;
     err(ctx, "add_socket_cb with no callback\n");
-    return -1;
+    return MCRX_ERR_INTERNAL_ERROR;
   }
   if (fd < 0) {
     errno = EINVAL;
     err(ctx, "add_socket_cb with bad fd (%d)\n", fd);
-    return -1;
+    return MCRX_ERR_INTERNAL_ERROR;
   }
   struct mcrx_fd_handle* new_cb = (struct mcrx_fd_handle*)calloc(1,
       sizeof(struct mcrx_fd_handle));
   if (new_cb == NULL) {
     errno = ENOMEM;
     err(ctx, "failed to alloc fd handle, oom\n");
-    return -1;
+    return MCRX_ERR_NOMEM;
   }
   new_cb->magic = MCRX_FD_HANDLE_MAGIC;
   new_cb->ctx = ctx;
@@ -222,7 +258,7 @@ int mcrx_prv_add_socket_cb(
       }
       evt->flags = EV_ADD | EV_ENABLE;
       free(old_cb);
-      return 0;
+      return MCRX_ERR_OK;
     }
   }
   if (ctx->events == NULL) {
@@ -232,7 +268,7 @@ int mcrx_prv_add_socket_cb(
       err(ctx, "failed to alloc 1-entry event list, oom\n");
       errno = ENOMEM;
       free(new_cb);
-      return -1;
+      return MCRX_ERR_NOMEM;
     }
     dbg(ctx, "allocd 1-entry event list\n");
     evt = &ctx->events[0];
@@ -244,7 +280,7 @@ int mcrx_prv_add_socket_cb(
           ctx->nevents + 1);
       errno = ENOMEM;
       free(new_cb);
-      return -1;
+      return MCRX_ERR_NOMEM;
     }
     dbg(ctx, "reallocd %u-entry eventl list\n", ctx->nevents + 1);
     ctx->events = new_evt;
@@ -262,12 +298,12 @@ int mcrx_prv_remove_socket_cb(
   if (!ctx) {
     errno = EINVAL;
     err(ctx, "remove_socket_cb with no ctx\n");
-    return -1;
+    return MCRX_ERR_INTERNAL_ERROR;
   }
   if (fd < 0) {
     errno = EINVAL;
     err(ctx, "remove_socket_cb with bad fd (%d)\n", fd);
-    return -1;
+    return MCRX_ERR_INTERNAL_ERROR;
   }
 
   u_int idx;
@@ -279,14 +315,16 @@ int mcrx_prv_remove_socket_cb(
       if (!old_cb) {
         err(ctx, "internal error: no udata set on event for %d\n", fd);
         errno = EINVAL;
-        return -1;
+        return MCRX_ERR_INTERNAL_ERROR;
       }
       if (old_cb->ctx != ctx) {
-        err(ctx, "internal error: wrong ctx on %d\n", fd);
+        err(ctx, "ctx %p internal error: wrong ctx(%p) on %d\n", (void*)ctx,
+            (void*)old_cb->ctx, fd);
       }
       if (old_cb->fd != fd) {
-        err(ctx, "internal error: wrong ctx on %d\n", fd);
+        err(ctx, "internal error: wrong fd (%d) on %d\n", fd, old_cb->fd);
       }
+      dbg(ctx, "removing fd %d from wait events\n", fd);
       evt->udata = 0;
       if (evt->flags & EV_ADD) {
         if (ctx->nadded < 1) {
@@ -317,7 +355,7 @@ int mcrx_prv_remove_socket_cb(
 
   err(ctx, "internal error: did not find fd to remove\n");
   errno = EBADF;
-  return -1;
+  return MCRX_ERR_INTERNAL_ERROR;
 }
 
 #endif  // MCRX_PRV_USE_KEVENT
@@ -325,7 +363,68 @@ int mcrx_prv_remove_socket_cb(
 #if MCRX_PRV_USE_EPOLL
 #include <sys/epoll.h>
 
-MCRX_EXPORT int mcrx_ctx_receive_packets(
+// I isolated the handling of various system calls in case I
+// need to refine the error handling better.  At this point,
+// the only goal is to have enough breadcrumbs to debug it if
+// these errors get hit, but it's possible more refined error
+// reporting would become worthwhile.
+static enum mcrx_error_code handle_epollcreate_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "epoll_create1 error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_EPOLLCREATE;
+}
+#define handle_epollcreate_error(ctx) handle_epollcreate_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
+
+static enum mcrx_error_code handle_epolladd_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "epoll_ctl(ADD) error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_EPOLLADD;
+}
+#define handle_epolladd_error(ctx) handle_epolladd_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
+
+static enum mcrx_error_code handle_epolldel_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "epoll_ctl(DEL) error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_EPOLLDEL;
+}
+#define handle_epolldel_error(ctx) handle_epolldel_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
+
+static enum mcrx_error_code handle_epollwait_error_impl(
+    struct mcrx_ctx* ctx,
+    const char* file,
+    int line,
+    const char* func) {
+  char buf[1024];
+  wrap_strerr(errno, buf, sizeof(buf));
+  err_passthru(ctx, file, line, func,
+      "epoll_wait() error: %s\n", buf);
+  return MCRX_ERR_SYSCALL_EPOLLWAIT;
+}
+#define handle_epollwait_error(ctx) handle_epollwait_error_impl(\
+    (ctx), __FILE__, __LINE__, __func__)
+
+MCRX_EXPORT enum mcrx_error_code mcrx_ctx_receive_packets(
     struct mcrx_ctx *ctx) {
   if (ctx->nevents == 0) {
     if (ctx->triggered != NULL) {
@@ -336,50 +435,51 @@ MCRX_EXPORT int mcrx_ctx_receive_packets(
         close(ctx->wait_fd);
         ctx->wait_fd = -1;
       }
+      return MCRX_ERR_NOTHING_JOINED;
     } else {
       warn(ctx, "waiting again for packets with no listeners\n");
       if (ctx->timeout_ms > 0) {
         usleep(1000*ctx->timeout_ms);
       } else {
-        // much friendlier to other threads when there's a bug...
+        // if caller improperly spins on this call, it's much friendlier
+        // to other threads to inject a 1ms sleep. --jake 2019-06-28
         usleep(1000);
       }
     }
-    return EAGAIN;
+    return MCRX_ERR_NOTHING_JOINED;
   }
   if (ctx->wait_fd == -1) {
     err(ctx, "no wait_fd ctx %p on entry to receive_packets\n", (void*)ctx);
-    // shouldn't ever get here.  should make this fatal?
+    // shouldn't ever get here.  should make this fatal, or keep going?
     // --jake 2019-06-21
     int fd = epoll_create1(EPOLL_CLOEXEC);
     if (fd < 0) {
-      char buf[1024];
-      wrap_strerr(errno, buf, sizeof(buf));
-      err(ctx, "failed epoll_create1: %s\n", buf);
-      return -1;
+      return handle_epollcreate_error(ctx);
     }
-    ctx->wait_fd = fd;
     u_int idx;
     for (idx = 0; idx < ctx->nevents; idx++) {
       struct epoll_event* evt = &ctx->events[idx];
       struct mcrx_fd_handle* cur_cb = (struct mcrx_fd_handle*)evt->data.ptr;
       int rc = epoll_ctl(ctx->wait_fd, EPOLL_CTL_ADD, cur_cb->fd, evt);
       if (rc < 0) {
-        char buf[1024];
-        wrap_strerr(errno, buf, sizeof(buf));
-        err(ctx, "failed epoll_ctl(ADD): %s\n", buf);
-        return -1;
+        enum mcrx_error_code ret = handle_epolladd_error(ctx);
+        int prev_errno = errno;
+        if (close(fd)) {
+          handle_close_error(ctx);
+        }
+        errno = prev_errno;
+        return ret;
       }
     }
+    ctx->wait_fd = fd;
   }
   if (ctx->nevents != ctx->ntriggered) {
     if (ctx->triggered == NULL) {
       ctx->triggered = (struct epoll_event*)calloc(ctx->nevents,
           sizeof(struct epoll_event));
       if (!ctx->triggered) {
-        errno = ENOMEM;
         err(ctx, "failed to alloc %d events\n", ctx->nevents);
-        return ENOMEM;
+        return MCRX_ERR_NOMEM;
       }
       ctx->ntriggered = ctx->nevents;
     } else {
@@ -401,15 +501,12 @@ MCRX_EXPORT int mcrx_ctx_receive_packets(
       nevents, ctx->nevents, ctx->ntriggered);
 
   if (nevents < 0) {
-    char buf[1024];
-    wrap_strerr(errno, buf, sizeof(buf));
-    err(ctx, "failed epoll_wait: %s\n", buf);
-    return errno;
+    return handle_epollwait_error(ctx);
   }
 
   if (nevents == 0) {
-    dbg(ctx, "no events fired--timed out? %d\n", ctx->timeout_ms);
-    return ETIMEDOUT;
+    dbg(ctx, "no events fired--timed out, hopefully %d\n", ctx->timeout_ms);
+    return MCRX_ERR_TIMEDOUT;
   }
 
   // keep ctx alive regardless of what happens during callbacks.
@@ -433,11 +530,16 @@ MCRX_EXPORT int mcrx_ctx_receive_packets(
     }
     dbg(ctx, "receive_cb handle=%"PRIxPTR"x fd=%d cb=%p\n",
         handle->handle, handle->fd, (void*)handle);
-    handle->handle_cb(handle->handle, handle->fd);
+    int rc = handle->handle_cb(handle->handle, handle->fd);
+    if (rc != MCRX_RECEIVE_CONTINUE) {
+      if (rc == MCRX_RECEIVE_STOP_CTX) {
+        break;
+      }
+    }
   }
   mcrx_ctx_unref(ctx);
 
-  return 0;
+  return MCRX_ERR_OK;
 }
 
 int mcrx_prv_add_socket_cb(
@@ -446,27 +548,26 @@ int mcrx_prv_add_socket_cb(
     int fd,
     int (*handle_cb)(intptr_t handle, int fd)) {
   if (!ctx) {
-    errno = EINVAL;
     err(ctx, "add_socket_cb with no ctx\n");
-    return -1;
+    errno = EINVAL;
+    return MCRX_ERR_INTERNAL_ERROR;
   }
   if (!handle_cb) {
-    errno = EINVAL;
     err(ctx, "add_socket_cb with no callback\n");
-    return -1;
+    errno = EINVAL;
+    return MCRX_ERR_INTERNAL_ERROR;
   }
   if (fd < 0) {
-    errno = EINVAL;
     err(ctx, "add_socket_cb with bad fd (%d)\n", fd);
-    return -1;
+    errno = EINVAL;
+    return MCRX_ERR_INTERNAL_ERROR;
   }
   if (ctx->wait_fd == -1) {
     int wait_fd = epoll_create1(EPOLL_CLOEXEC);
     if (wait_fd < 0) {
-      char buf[1024];
-      wrap_strerr(errno, buf, sizeof(buf));
-      err(ctx, "failed epoll_create1: %s\n", buf);
-      return -1;
+      handle_epollcreate_error(ctx);
+      errno = EINVAL;
+      return MCRX_ERR_INTERNAL_ERROR;
     }
     ctx->wait_fd = wait_fd;
   }
@@ -476,7 +577,7 @@ int mcrx_prv_add_socket_cb(
   if (new_cb == NULL) {
     errno = ENOMEM;
     err(ctx, "failed to alloc fd handle, oom\n");
-    return -1;
+    return MCRX_ERR_NOMEM;
   }
   new_cb->magic = MCRX_FD_HANDLE_MAGIC;
   new_cb->ctx = ctx;
@@ -493,7 +594,7 @@ int mcrx_prv_add_socket_cb(
       errno = ENOMEM;
       err(ctx, "failed to alloc space for new fd handle, oom\n");
       free(new_cb);
-      return -1;
+      return MCRX_ERR_NOMEM;
     }
   } else {
     struct epoll_event *new_holders = (struct epoll_event*)realloc(
@@ -502,7 +603,7 @@ int mcrx_prv_add_socket_cb(
       errno = ENOMEM;
       err(ctx, "failed to realloc space for new fd handle, oom\n");
       free(new_cb);
-      return -1;
+      return MCRX_ERR_NOMEM;
     }
     ctx->events = new_holders;
   }
@@ -513,11 +614,9 @@ int mcrx_prv_add_socket_cb(
   int rc = epoll_ctl(ctx->wait_fd, EPOLL_CTL_ADD, fd,
       &ctx->events[ctx->nevents]);
   if (rc < 0) {
-    char buf[1024];
-    wrap_strerr(errno, buf, sizeof(buf));
-    err(ctx, "failed epoll_ctl(ADD): %s\n", buf);
+    enum mcrx_error_code ret = handle_epolladd_error(ctx);
     free(new_cb);
-    return -1;
+    return ret;
   }
   ctx->nevents += 1;
 
@@ -530,12 +629,12 @@ int mcrx_prv_remove_socket_cb(
   if (!ctx) {
     errno = EINVAL;
     err(ctx, "remove_socket_cb with no ctx\n");
-    return -1;
+    return MCRX_ERR_INTERNAL_ERROR;
   }
   if (fd < 0) {
     errno = EINVAL;
     err(ctx, "remove_socket_cb with bad fd (%d)\n", fd);
-    return -1;
+    return MCRX_ERR_INTERNAL_ERROR;
   }
 
   u_int idx;
@@ -552,9 +651,7 @@ int mcrx_prv_remove_socket_cb(
     if (ctx->wait_fd != -1) {
       int rc = epoll_ctl(ctx->wait_fd, EPOLL_CTL_DEL, fd, evt);
       if (rc < 0) {
-        char buf[1024];
-        wrap_strerr(errno, buf, sizeof(buf));
-        err(ctx, "failed epoll_ctl(DEL): %s\n", buf);
+        handle_epolldel_error(ctx);
       }
     }
     if (idx < ctx->nevents) {
@@ -577,7 +674,7 @@ int mcrx_prv_remove_socket_cb(
 
   err(ctx, "internal error: did not find fd to remove\n");
   errno = EBADF;
-  return -1;
+  return MCRX_ERR_INTERNAL_ERROR;
 }
 
 #endif  // MCRX_PRV_USE_EPOLL
