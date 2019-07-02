@@ -8,12 +8,12 @@
 
 DESCRIPTION
 
-  This library implements multicast receiving logic, including native
-  and AMT with automatic discovery as described by DRIAD (including
-  DNS-SD), and authentication/loss reporting/bandwidth limits using
-  AMBI.
-  draft-ietf-mboned-driad-amt-discovery
-  draft-jholland-mboned-ambi
+  This library implements multicast receiving logic.  It will support
+  native and AMT with automatic discovery as described by DRIAD and
+  authentication/loss reporting/bandwidth limit enforcement using AMBI.
+
+      draft-ietf-mboned-driad-amt-discovery
+      draft-jholland-mboned-ambi
 
 REQUIREMENTS
 
@@ -21,21 +21,10 @@ REQUIREMENTS
   and need to regenerate Makefile.in, you will need Automake 1.11 or
   later.  For bootstrap or if you change configure.ac or any of the m4
   files it includes and need to regenerate configure or config.h.in, you
-  will need Autoconf 2.60 or later.
-
-  Also useful are a C++ compiler and some mild insanity.
+  will need Autoconf 2.60 or later.  A C compiler is also probably
+  required before it's useful.
 
 BUILDING
-
-  You can build libmcrx with:
-
-      ./configure
-      make
-      make check
-
-  Pass --enable-logging to configure to enable logging functionality.
-
-  Pass --enable-debug to configure to enable debug messages.
 
   To regenerate from scratch:
 
@@ -44,6 +33,14 @@ BUILDING
       make
       make check
 
+  To install:
+
+      make install
+
+  Pass --enable-logging to configure to enable logging functionality.
+
+  Pass --enable-debug to configure to enable debug messages.
+
 TESTING
 
   libmcrx comes with a test suite, which you can run after building
@@ -51,21 +48,12 @@ TESTING
 
       make check
 
-USING THIS CODE
-
-  While there is an install target, it's present only because Automake
-  provides it automatically.  Its use is not recommended.  Instead, the
-  code in this package is intended to be copied into your package and
-  serves only as a template.
-
 HOMEPAGE AND SOURCE REPOSITORY
-
-  The libmcrx web page is at:
-
-      http://github.com/GrumpyOldTroll/libmcrx
 
   libmcrx is maintained using Git.  You can access the current source
   by cloning the repository at:
+
+      http://github.com/GrumpyOldTroll/libmcrx
 
   Please send any bug reports, patches, or questions to
   jakeholland.net@gmail.com.
@@ -74,6 +62,7 @@ THANKS
 
   Thanks to Kay Sievers and Lennart Poettering for their libabc template
   library, it's a wonderfully useful starting point.
-  http://0pointer.de/blog/projects/libabc.html
-  https://git.kernel.org/pub/scm/linux/kernel/git/kay/libabc.git/plain/README
+
+    http://0pointer.de/blog/projects/libabc.html
+    https://git.kernel.org/pub/scm/linux/kernel/git/kay/libabc.git/plain/README
 
