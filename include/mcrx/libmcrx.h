@@ -22,6 +22,7 @@
 #define GUARD_LIBMCRX_H
 
 #include <stdarg.h>
+#include <stdint.h>
 #include <netinet/in.h>
 #include <mcrx/errors.h>
 
@@ -181,13 +182,13 @@ enum MCRX_ADDR_TYPE {
  */
 struct mcrx_subscription_config {
   int magic;
+  uint16_t packet_size;
+  uint16_t port;  // in host byte order (.port=255 to get wire=0x00ff)
   enum MCRX_ADDR_TYPE addr_type;
   union {
     struct mcrx_subscription_addrs_v4 v4;
     struct mcrx_subscription_addrs_v6 v6;
   } addrs;
-  uint16_t port;  // in host byte order (.port=255 to get wire=0x00ff)
-  uint16_t packet_size;
 };
 #define MCRX_SUBSCRIPTION_CONFIG_INIT_MAGIC 0x42
 // default values
