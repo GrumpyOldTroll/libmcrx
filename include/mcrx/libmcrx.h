@@ -23,6 +23,7 @@
 
 #include <stdarg.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <netinet/in.h>
 #include <mcrx/errors.h>
 

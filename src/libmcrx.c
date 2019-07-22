@@ -257,6 +257,61 @@ MCRX_EXPORT void mcrx_ctx_set_userdata(
   ctx->userdata = userdata;
 }
 
+MCRX_EXPORT enum mcrx_error_code mcrx_ctx_set_receive_socket_handlers(
+    struct mcrx_ctx *ctx,
+    int (*add_socket_cb)(
+        struct mcrx_ctx*,
+        intptr_t handle,
+        int fd,
+        int (*do_receive)(intptr_t handle, int fd)),
+    int (*remove_socket_cb)(
+        struct mcrx_ctx*,
+        int fd)) {
+  if (ctx == NULL) {
+    return MCRX_ERR_NULLARG;
+  }
+
+  if (ctx->sock_handler_state == MCRX_SOCKHANDLER_BUILTIN) {
+    return MCRX_ERR_INCONSISTENT_HANDLER;
+  }
+
+  if (ctx->sock_handler_state == MCRX_SOCKHANDLER_EXTERNAL) {
+    if (add_socket_cb == NULL && remove_socket_cb == NULL) {
+      if (ctx->live_subs == 0) {
+        ctx->add_socket_cb = mcrx_prv_add_socket_cb;
+        ctx->remove_socket_cb = mcrx_prv_remove_socket_cb;
+        ctx->sock_handler_state = MCRX_SOCKHANDLER_UNCOMMITTED;
+        return MCRX_ERR_OK;
+      }
+      return MCRX_ERR_INCONSISTENT_HANDLER;
+    }
+    ctx->add_socket_cb = add_socket_cb;
+    ctx->remove_socket_cb = remove_socket_cb;
+    return MCRX_ERR_OK;
+  }
+
+  if (ctx->sock_handler_state == MCRX_SOCKHANDLER_UNCOMMITTED) {
+    if (ctx->live_subs != 0) {
+      err(ctx,
+          "internal error: ctx %p uncommitted sockhandler with live subs\n",
+          (void*)ctx);
+      return MCRX_ERR_INTERNAL_ERROR;
+    }
+    if (!add_socket_cb || !remove_socket_cb) {
+      err(ctx,
+          "ctx %p ignoring null socket handler registration\n", (void*)ctx);
+      return MCRX_ERR_NULLARG;
+    }
+    ctx->add_socket_cb = add_socket_cb;
+    ctx->remove_socket_cb = remove_socket_cb;
+    ctx->sock_handler_state = MCRX_SOCKHANDLER_EXTERNAL;
+    return MCRX_ERR_OK;
+  }
+
+  err(ctx, "internal error: ctx %p sockhandler unknown state\n", (void*)ctx);
+  return MCRX_ERR_INTERNAL_ERROR;
+}
+
 static int log_priority(
     const char *priority) {
   char *endptr;
@@ -327,6 +382,7 @@ MCRX_EXPORT enum mcrx_error_code mcrx_ctx_new(
   c->timeout_ms = 1000 + random() % 1000;
   c->add_socket_cb = mcrx_prv_add_socket_cb;
   c->remove_socket_cb = mcrx_prv_remove_socket_cb;
+  c->sock_handler_state = MCRX_SOCKHANDLER_UNCOMMITTED;
   c->wait_fd = -1;
 
   // info(c, "version %s context %p created\n", VERSION, (void *)c);
@@ -660,7 +716,34 @@ MCRX_EXPORT void mcrx_subscription_set_receive_cb(
  **/
 MCRX_EXPORT enum mcrx_error_code mcrx_subscription_join(
     struct mcrx_subscription* sub) {
-  return mcrx_subscription_native_join(sub);
+  enum mcrx_error_code err = mcrx_subscription_native_join(sub);
+  if (err == MCRX_ERR_OK) {
+    struct mcrx_ctx* ctx = (struct mcrx_ctx*)mcrx_subscription_get_ctx(sub);
+    if (ctx) {
+      ctx->live_subs++;
+    }
+  }
+  return err;
+}
+
+/**
+ * mcrx_subscription_leave:
+ * @sub: mcrx subscription handle
+ *
+ * Stop receiving and leave the subscription's (S,G).
+ *
+ * Returns: error code
+ **/
+MCRX_EXPORT enum mcrx_error_code mcrx_subscription_leave(
+    struct mcrx_subscription* sub) {
+  enum mcrx_error_code err = mcrx_subscription_native_leave(sub);
+  if (err == MCRX_ERR_OK) {
+    struct mcrx_ctx* ctx = (struct mcrx_ctx*)mcrx_subscription_get_ctx(sub);
+    if (ctx) {
+      ctx->live_subs--;
+    }
+  }
+  return err;
 }
 
 /**

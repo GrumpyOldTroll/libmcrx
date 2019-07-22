@@ -38,10 +38,12 @@ enum mcrx_error_code {
   MCRX_ERR_INTERNAL_ERROR,
   MCRX_ERR_CALLBACK_FAILED,
   MCRX_ERR_NOTHING_JOINED,
+  MCRX_ERR_INCONSISTENT_HANDLER,
 
   // errors from system calls within the library.  errno
   // remains as set by the underlying system.
-  MCRX_ERR_SYSCALL_BIND,
+  // for stability under change, these come from a different space.
+  MCRX_ERR_SYSCALL_BIND = 9001,
   MCRX_ERR_SYSCALL_CLOSE,
   MCRX_ERR_SYSCALL_CONNECT,
   MCRX_ERR_SYSCALL_FCNTL,

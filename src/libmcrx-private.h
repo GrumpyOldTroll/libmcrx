@@ -127,6 +127,12 @@ struct mcrx_subscription {
   int joined;
 };
 
+enum mcrx_socket_handling_state {
+  MCRX_SOCKHANDLER_UNCOMMITTED,
+  MCRX_SOCKHANDLER_BUILTIN,
+  MCRX_SOCKHANDLER_EXTERNAL
+};
+
 /**
  * mcrx_ctx:
  *
@@ -157,6 +163,10 @@ struct mcrx_ctx {
   int (*remove_socket_cb)(
     struct mcrx_ctx* ctx,
     int fd);
+
+  u_int live_subs;
+  enum mcrx_socket_handling_state sock_handler_state;
+
 #if MCRX_PRV_USE_KEVENT
   struct kevent* events;
   u_int nevents;
@@ -173,6 +183,8 @@ struct mcrx_ctx {
 };
 
 enum mcrx_error_code mcrx_subscription_native_join(
+    struct mcrx_subscription* sub);
+enum mcrx_error_code mcrx_subscription_native_leave(
     struct mcrx_subscription* sub);
 
 int mcrx_prv_add_socket_cb(

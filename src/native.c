@@ -1222,15 +1222,7 @@ enum mcrx_error_code mcrx_subscription_native_join(
   return MCRX_ERR_OK;
 }
 
-/**
- * mcrx_subscription_leave:
- * @sub: mcrx subscription handle
- *
- * Stop receiving and leave the subscription's (S,G).
- *
- * Returns: error code
- **/
-MCRX_EXPORT enum mcrx_error_code mcrx_subscription_leave(
+enum mcrx_error_code mcrx_subscription_native_leave(
     struct mcrx_subscription* sub) {
   struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
   if (!sub || !ctx) {

@@ -2,6 +2,7 @@
 *.log
 *.trs
 *.lint
+.DS_Store
 .deps/
 .libs/
 Makefile
