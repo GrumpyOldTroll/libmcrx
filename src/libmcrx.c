@@ -883,3 +883,20 @@ MCRX_EXPORT uint16_t mcrx_packet_get_contents(
   return pkt->size;
 }
 
+/**
+ * mcrx_packet_get_remote_port:
+ * @pkt: mcrx packet handle
+ *
+ * Retrieve the source port.
+ *
+ * Returns: the source port of the packet in host byte order.
+ **/
+MCRX_EXPORT uint16_t mcrx_packet_get_remote_port(
+    struct mcrx_packet* pkt) {
+  if (pkt == NULL) {
+    return 0;
+  }
+
+  return pkt->remote_port;
+}
+

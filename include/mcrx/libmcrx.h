@@ -254,6 +254,9 @@ struct mcrx_subscription* mcrx_packet_get_subscription(
 uint16_t mcrx_packet_get_contents(
     struct mcrx_packet* pkt,
     uint8_t** data);
+// remote port of received packet (host byte order)
+uint16_t mcrx_packet_get_remote_port(
+    struct mcrx_packet* pkt);
 
 #define MCRX_SUB_STRLEN (INET6_ADDRSTRLEN+2+INET6_ADDRSTRLEN+1+6)
 /**

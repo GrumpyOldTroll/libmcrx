@@ -105,6 +105,7 @@ struct mcrx_packet {
   int refcount;
   intptr_t userdata;
   TAILQ_ENTRY(mcrx_packet) pkt_entries;
+  uint16_t remote_port;
   uint16_t size;
   uint8_t data[];
 };

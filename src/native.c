@@ -713,6 +713,7 @@ static int native_receive(
       return MCRX_RECEIVE_STOP_CTX;
     }
 
+    struct sockaddr_storage ss;
     struct iovec iov;
     bzero(&iov, sizeof(iov));
     iov.iov_base = &pkt->data;
@@ -721,6 +722,8 @@ static int native_receive(
     bzero(&hdr, sizeof(hdr));
     hdr.msg_iov = &iov;
     hdr.msg_iovlen = 1;
+    hdr.msg_name = &ss;
+    hdr.msg_namelen = sizeof(ss);
 
     rc = recvmsg(fd, &hdr, MSG_TRUNC | MSG_DONTWAIT);
     if (rc < 0) {
@@ -749,6 +752,24 @@ static int native_receive(
     } else {
       pkt->size = rc;
     }
+
+    switch (sub->input.addr_type) {
+      case MCRX_ADDR_TYPE_V4: {
+        struct sockaddr_in* sin = (struct sockaddr_in*)&ss;
+        pkt->remote_port = htons(sin->sin_port);
+        break;
+      }
+      case MCRX_ADDR_TYPE_V6: {
+        struct sockaddr_in6* sin6 = (struct sockaddr_in6*)&ss;
+        pkt->remote_port = htons(sin6->sin6_port);
+        break;
+      }
+      default:
+        err(ctx, "sub %p internal error: unknown family while receiving\n",
+            (void*)sub);
+        return MCRX_RECEIVE_STOP_CTX;
+    }
+
     TAILQ_INSERT_TAIL(&sub->pkts_head, pkt, pkt_entries);
 
     int rcb_ret = sub->receive_cb(pkt);
