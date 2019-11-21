@@ -48,6 +48,7 @@ draft-ietf-mboned-driad-amt-discovery for details.''')
 
     args = parser.parse_args(args_in[1:])
     source_ip_str = args.SourceIP
+
     source_ip = ipaddress.ip_address(source_ip_str)
     rev_ip_name = source_ip.reverse_pointer
     # note: on mac, this does not work without encoding the ip as ascii
