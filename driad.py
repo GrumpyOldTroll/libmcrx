@@ -45,6 +45,7 @@ draft-ietf-mboned-driad-amt-discovery for details.''')
     parser.add_argument('-v', '--verbose', action='count')
     parser.add_argument('SourceIP', help='source ip of a multicast source')
     parser.add_argument('-r', '--resolver', help='use a specific DNS resolver')
+
     args = parser.parse_args(args_in[1:])
     source_ip_str = args.SourceIP
     source_ip = ipaddress.ip_address(source_ip_str)
