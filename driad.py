@@ -44,6 +44,7 @@ draft-ietf-mboned-driad-amt-discovery for details.''')
 
     parser.add_argument('-v', '--verbose', action='count')
     parser.add_argument('SourceIP', help='source ip of a multicast source')
+    parser.add_argument('-r', '--resolver', help='use a specific DNS resolver')
 
     args = parser.parse_args(args_in[1:])
     source_ip_str = args.SourceIP
@@ -51,7 +52,11 @@ draft-ietf-mboned-driad-amt-discovery for details.''')
     source_ip = ipaddress.ip_address(source_ip_str)
     rev_ip_name = source_ip.reverse_pointer
     # note: on mac, this does not work without encoding the ip as ascii
-    initial_cmd = ['dig', '+short',  '-t',  'TYPE260', rev_ip_name.encode('ascii')]
+    if args.resolver is None:
+        initial_cmd = ['dig', '+short',  '-t',  'TYPE260', rev_ip_name.encode('ascii')]
+    else:
+        resolver = "@"+args.resolver
+        initial_cmd = ['dig', '+short',  '-t',  'TYPE260', resolver, rev_ip_name.encode('ascii')]
 
     if args.verbose:
         print('running "%s"' % ' '.join([str(x) for x in initial_cmd]),
@@ -125,7 +130,11 @@ draft-ietf-mboned-driad-amt-discovery for details.''')
             names.append(name)
             ix += 2*ln
         dn = '.'.join(names)
-        secondary_dig_cmd = ['dig', '+short', dn.encode('ascii')]
+        if args.resolver is None:
+            secondary_dig_cmd = ['dig', '+short', dn.encode('ascii')]
+        else:
+            resolver = "@"+args.resolver
+            secondary_dig_cmd = ['dig', '+short', resolver, dn.encode('ascii')]
         if args.verbose:
             print('running "%s"' % ' '.join([str(x) for x in secondary_dig_cmd]),
                 file=sys.stderr)
