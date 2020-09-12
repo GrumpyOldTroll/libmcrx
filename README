@@ -24,6 +24,10 @@ REQUIREMENTS
   will need Autoconf 2.60 or later.  A C compiler is also probably
   required before it's useful.
 
+  Ubuntu:
+
+    apt install autoconf libtool-bin make build-essentials
+
 BUILDING
 
   To regenerate from scratch:
