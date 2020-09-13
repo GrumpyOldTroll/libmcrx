@@ -62,6 +62,16 @@ enum mcrx_error_code {
   MCRX_ERR_SYSCALL_KQUEUE,
 };
 
+// this will give error information about the error code above
+// if mcrx_is_system_error(err) is true, there may be additional
+// information available by calling strerror(errno)
+const char* mcrx_strerror(enum mcrx_error_code err);
+
+// this is zero when no errno can be expected, or 1 when errno
+// can be used to strerror(errno) to see the underlying system
+// problem encountered.
+int mcrx_is_system_error(enum mcrx_error_code err);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

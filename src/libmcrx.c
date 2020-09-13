@@ -900,3 +900,91 @@ MCRX_EXPORT uint16_t mcrx_packet_get_remote_port(
   return pkt->remote_port;
 }
 
+/**
+ * mcrx_strerror:
+ * @err: enum mcrx_error_code
+ *
+ * Similar to strerror(2). For some cases from system call failures,
+ * errno will also be set and can additionally be used in strerror/perror
+ * for more information about the problem encountered.
+ */
+MCRX_EXPORT const char*
+mcrx_strerror(enum mcrx_error_code err) {
+  switch (err) {
+    case MCRX_ERR_OK:
+      return "mcrx: no error";
+    case MCRX_ERR_TIMEDOUT:
+      return "mcrx: timed out";
+    case MCRX_ERR_NOMEM:
+      return "mcrx: out of memory";
+    case MCRX_ERR_NULLARG:
+      return "mcrx: null argument passed";
+    case MCRX_ERR_NOSPACE:
+      return "mcrx: insufficient buffer space for ntop";
+    case MCRX_ERR_UNKNOWN_FAMILY:
+      return "mcrx: unknown address family";
+    case MCRX_ERR_UNSUPPORTED:
+      return "mcrx: unsupported operation";
+    case MCRX_ERR_ALREADY_JOINED:
+      return "mcrx: already joined";
+    case MCRX_ERR_ALREADY_NOTJOINED:
+      return "mcrx: already not joined";
+    case MCRX_ERR_INTERNAL_ERROR:
+      return "mcrx: internal library error";
+    case MCRX_ERR_CALLBACK_FAILED:
+      return "mcrx: callback failed";
+    case MCRX_ERR_NOTHING_JOINED:
+      return "mcrx: nothing joined";
+    case MCRX_ERR_INCONSISTENT_HANDLER:
+      return "mcrx: socket handlers not consistent with packet receive path";
+    case MCRX_ERR_SYSCALL_BIND:
+      return "mcrx: system error during bind()";
+    case MCRX_ERR_SYSCALL_CLOSE:
+      return "mcrx: system error during close()";
+    case MCRX_ERR_SYSCALL_CONNECT:
+      return "mcrx: system error during connect()";
+    case MCRX_ERR_SYSCALL_FCNTL:
+      return "mcrx: system error during fcntl()";
+    case MCRX_ERR_SYSCALL_GETSOCKNAME:
+      return "mcrx: system error during getsockname()";
+    case MCRX_ERR_SYSCALL_GETIFADDRS:
+      return "mcrx: system error during getifaddrs()";
+    case MCRX_ERR_SYSCALL_NTOP:
+      return "mcrx: system error during ntop()";
+    case MCRX_ERR_SYSCALL_RECVMSG:
+      return "mcrx: system error during recvmsg()";
+    case MCRX_ERR_SYSCALL_SOCKET:
+      return "mcrx: system error during socket()";
+    case MCRX_ERR_SYSCALL_SETSOCKOPT:
+      return "mcrx: system error during setsockopt()";
+    case MCRX_ERR_SYSCALL_SETSOURCEFILTER:
+      return "mcrx: system error during setsourcefilter()";
+    case MCRX_ERR_SYSCALL_EPOLLCREATE:
+      return "mcrx: system error during epollcreate()";
+    case MCRX_ERR_SYSCALL_EPOLLADD:
+      return "mcrx: system error during epolladd()";
+    case MCRX_ERR_SYSCALL_EPOLLDEL:
+      return "mcrx: system error during epolldel()";
+    case MCRX_ERR_SYSCALL_EPOLLWAIT:
+      return "mcrx: system error during epollwait()";
+    case MCRX_ERR_SYSCALL_KEVENT:
+      return "mcrx: system error during kevent()";
+    case MCRX_ERR_SYSCALL_KQUEUE:
+      return "mcrx: system error during kqueue()";
+  }
+  return "mcrx_strerror: unknown error code";
+}
+
+/**
+ * mcrx_is_system_error:
+ * @err: enum mcrx_error_code
+ *
+ * returns 1 if calling strerror(errno) can be expected to give
+ * additional useful information about the underlying system problem
+ * encountered when mcrx produced this error code, or 0 otherwise.
+ */
+MCRX_EXPORT int
+mcrx_is_system_error(enum mcrx_error_code err) {
+  return err >= MCRX_ERR_SYSCALL_BIND;
+}
+
