@@ -220,6 +220,10 @@ enum mcrx_error_code mcrx_subscription_new(
     const struct mcrx_subscription_config* config,
     struct mcrx_subscription** subp);
 
+/*
+ * at entry to receive_cb, mcrx_packet_get_userdata returns the
+ * same as mcrx_subscription_get_userdata for the sub.
+ */
 enum mcrx_receive_cb_continuation {
   MCRX_RECEIVE_CONTINUE = 0,
   MCRX_RECEIVE_STOP_FD,

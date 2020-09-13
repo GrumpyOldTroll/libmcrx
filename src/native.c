@@ -746,6 +746,7 @@ static int native_receive(
     }
     pkt->sub = sub;
     pkt->refcount = 1;
+    pkt->userdata = sub->userdata;
     if (rc > sub->max_payload_size) {
       // expect hdr.flags & MSG_TRUNC here.
       pkt->size = sub->max_payload_size;
