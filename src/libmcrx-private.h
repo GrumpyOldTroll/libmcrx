@@ -45,6 +45,15 @@ mcrx_log_null(struct mcrx_ctx *ctx, const char *format, ...) {
   UNUSED(format);
 }
 
+#ifdef LIBMCRX_STATIC
+#define MCRX_EXPORT
+#else
+// for chromium's static build usage (with checking of exported symbols)
+// this caused an error, but it's needed for the dynamic library usage
+// in https://github.com/fg-inet/python-asyncio-taps. --jake 2020-10
+#define MCRX_EXPORT __attribute__((visibility("default")))
+#endif
+
 #define mcrx_log_cond(ctx, prio, file, line, func, ...)                   \
   do {                                                                    \
     if (mcrx_ctx_get_log_priority(ctx) >= prio)                           \
@@ -88,8 +97,6 @@ mcrx_log_null(struct mcrx_ctx *ctx, const char *format, ...) {
 #define warn_passthru(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
 #define err_passthru(ctx, ...) mcrx_log_null(ctx, __VA_ARGS__)
 #endif
-
-#define MCRX_EXPORT __attribute__((visibility("default")))
 
 void mcrx_log(struct mcrx_ctx *ctx, enum mcrx_log_priority priority,
     const char *file, int line, const char *fn, const char *format, ...)
