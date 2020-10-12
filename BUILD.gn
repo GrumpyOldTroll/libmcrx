@@ -5,6 +5,9 @@ import("//build/config/compiler/compiler.gni")
 
 config("libmcrx_config") {
   include_dirs = [ "include" ]
+  cflags = [
+    "-DLIBMCRX_STATIC"
+  ]
 }
 
 static_library("mcrx") {
