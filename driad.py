@@ -22,6 +22,8 @@ import random
 import ipaddress
 import subprocess
 import argparse
+import re
+from itertools import groupby
 
 '''
 Attempts lookup of an AMT relay that can forward multicast traffic
@@ -65,90 +67,106 @@ draft-ietf-mboned-driad-amt-discovery for details.''')
     initial_dig_output = \
             subprocess.check_output(initial_cmd).decode('ascii').strip()
 
-    prec = 256
-    rand = 0
-    loc = None
-    typ = None
-    npossibilities = 0
+    amt_line_re = re.compile(r'^\s*(?:\\#\s+(?P<generic_len>[0-9]+)\s+(?P<generic_data>(?:[0-9a-fA-F]|\s)+)|(?P<precedence>[0-9]+)\s+(?P<dbit>0|1)\s+(?P<type>[0-3])\s+(?P<relay>\S+)\s*)$')
+
+    possibilities = []
     for line in initial_dig_output.split('\n'):
         if args.verbose:
             print('parsing line: %s' % line, file=sys.stderr)
-        if not line.startswith('\\#'):
+        m = amt_line_re.match(line)
+        if not m:
             if args.verbose:
-                print('  skipping (does not start \\#)...', file=sys.stderr)
+                print(f'  skipping line "{line}" (does not match AMTRELAY)...', file=sys.stderr)
             continue
-        vals = line.rstrip().split(maxsplit=2)
-        if len(vals) != 3:
-            if args.verbose:
-                print('  skipping (does not have \\# <len> <vals>)...',
-                        file=sys.stderr)
-            continue
-        npossibilities += 1
-        val = vals[2]
-        cur_precedence = int(val[0:2],16)
-        cur_typ = int(val[2:4],16)&0x7f
-        if args.verbose:
-            print('  parsed precedence=%d, type=%d' % (cur_precedence, cur_typ),
-                    file=sys.stderr);
-
-        if cur_precedence < prec or \
-                (cur_precedence == prec and rand > random.random()):
-            rand = random.random()
-            loc = val[4:]
-            prec = cur_precedence
-            typ = cur_typ
-            if args.verbose:
-                print('  tentatively accepted val: %s' % loc,
-                        file=sys.stderr);
-
-    if not loc:
-        print('no results from DRIAD lookup: "%s"' %
-                ' '.join([str(x) for x in initial_cmd]), file=sys.stderr)
-        return -1
-
-    if typ == 1:
-        ans = '%d.%d.%d.%d' % (
-                int(loc[0:2],16),
-                int(loc[2:4],16),
-                int(loc[4:6],16),
-                int(loc[6:8],16))
-    elif typ == 2:
-        ans = ipaddress.ip_address(':'.join(
-            [loc[i:i+4] for i in range(0,32,4)])).compressed
-    elif typ == 3:
-        ix = 0
-        names = []
-        while ix < len(loc):
-            ln = int(loc[ix:ix+2],16)
-            if ln == 0:
-                break
-            #print('ln:%d' % ln)
-            ix += 2
-            name=''.join([chr(int(loc[jx:jx+2],16))
-                for jx in range(ix, ix+2*ln, 2)])
-            #print('name:%s' % name)
-            names.append(name)
-            ix += 2*ln
-        dn = '.'.join(names)
-        if args.resolver is None:
-            secondary_dig_cmd = ['dig', '+short', dn.encode('ascii')]
+        prec_str = m.group('precedence')
+        if prec_str:
+            cur_precedence = int(prec_str)
         else:
-            resolver = "@"+args.resolver
-            secondary_dig_cmd = ['dig', '+short', resolver, dn.encode('ascii')]
-        if args.verbose:
-            print('running "%s"' % ' '.join([str(x) for x in secondary_dig_cmd]),
-                file=sys.stderr)
-        out  = subprocess.check_output(secondary_dig_cmd).decode('ascii').strip()
-        if not out:
-            print('dig +short %s failed: %s' % (dn,out), file=sys.stderr)
-            return -1
-        ans = out
-    else:
-        print('failed TYPE260 parse:%s' % (loc), file=sys.stderr)
-        return -1
+            val = m.group('generic_data')
+            if val:
+                cur_precedence = int(val[0:2],16)
+            else:
+                if args.verbose:
+                    print(f'  internal error: matched regex without precedence, skipping', file=sys.stderr)
+                continue
+        possibilities.append((cur_precedence, m))
 
-    print(ans)
-    return 0
+    possibilities.sort()
+    for prec, equal_group in groupby(possibilities, lambda x: x[0]):
+        equal_list = list(equal_group)
+        if len(equal_list) > 1:
+            random.shuffle(equal_list)
+
+        for prec, m in equal_list:
+            typ_str, relay = m.group('type'), m.group('relay')
+            if typ_str:
+                typ = int(typ_str)
+            else:
+                val = m.group('generic_data')
+                typ = int(val[2:4],16)&0x7f
+                loc = val[4:]
+
+                if typ == 1:
+                    relay = '%d.%d.%d.%d' % (
+                            int(loc[0:2],16),
+                            int(loc[2:4],16),
+                            int(loc[4:6],16),
+                            int(loc[6:8],16))
+                elif typ == 2:
+                    relay = ipaddress.ip_address(':'.join(
+                        [loc[i:i+4] for i in range(0,32,4)])).compressed
+                elif typ == 3:
+                    ix = 0
+                    names = []
+                    while ix < len(loc):
+                        ln = int(loc[ix:ix+2],16)
+                        if ln == 0:
+                            break
+                        #print('ln:%d' % ln)
+                        ix += 2
+                        name=''.join([chr(int(loc[jx:jx+2],16))
+                            for jx in range(ix, ix+2*ln, 2)])
+                        #print('name:%s' % name)
+                        names.append(name)
+                        ix += 2*ln
+                    relay = '.'.join(names)
+
+                else:
+                    print('failed TYPE260 generic parse:%s' % (val), file=sys.stderr)
+                    continue
+
+            if typ == 3:
+                if args.resolver is None:
+                    secondary_dig_cmd = ['dig', '+short', relay.encode('ascii')]
+                else:
+                    resolver = "@"+args.resolver
+                    secondary_dig_cmd = ['dig', '+short', resolver, relay.encode('ascii')]
+                if args.verbose:
+                    print('  running "%s"' % ' '.join([str(x) for x in secondary_dig_cmd]),
+                        file=sys.stderr)
+                out  = subprocess.check_output(secondary_dig_cmd).decode('ascii').strip()
+                if not out:
+                    print('  rejecting: %s failed: %s' % (' '.join(secondary_dig_cmd), out), file=sys.stderr)
+                    continue
+                addrs = []
+                for line in out.split('\n'):
+                    try:
+                        addr = ipaddress.ip_address(line.strip())
+                    except:
+                        continue
+                    addrs.append(line.strip())
+                if len(addrs) == 0:
+                    print('  rejecting: %s no addresses found in output: %s' % (' '.join(secondary_dig_cmd), out), file=sys.stderr)
+                    continue
+
+                relay = addrs[random.randint(0, len(addrs)-1)]
+
+            print(relay)
+            return 0
+
+    print('no results from DRIAD lookup: "%s"' %
+            ' '.join([str(x) for x in initial_cmd]), file=sys.stderr)
+    return -1
 
 if __name__=="__main__":
     ret = main(sys.argv)
