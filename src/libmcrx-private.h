@@ -133,6 +133,7 @@ struct mcrx_subscription {
   int sock_fd;
   int (*receive_cb)(struct mcrx_packet* packet);
   int joined;
+  const char* override_ifname;
 };
 
 enum mcrx_socket_handling_state {

@@ -462,13 +462,15 @@ static enum mcrx_error_code mcrx_find_interface(
   route_main(rargc, rargv);
 #endif
 
+  int rc;
+  int addr_len = 0;
+  void* addr_p = 0;
   int family = AF_UNSPEC;
+
   struct sockaddr_storage ss;
   struct sockaddr* sp = (struct sockaddr*)&ss;
-  void* addr_p;
   int sa_len = 0;
   int addr_offset = 0;
-  int addr_len = 0;
   switch (sub->input.addr_type) {
     case MCRX_ADDR_TYPE_V4: {
       family = AF_INET;
@@ -501,68 +503,69 @@ static enum mcrx_error_code mcrx_find_interface(
       return MCRX_ERR_UNKNOWN_FAMILY;
   }
 
-  // extract the local interface by connecting a udp socket to the
-  // source and checking its local address.
-  int check_sock = socket(family, SOCK_DGRAM, IPPROTO_UDP);
-  if (check_sock < 0) {
-    err(ctx, "sub %p socket() failed\n", (void*)sub);
-    return handle_socket_error(ctx);
-  }
-  info(ctx, "sub %p interface lookup socket created: %d\n",
-      (void*)sub, check_sock);
-
-  int rc;
-  rc = connect(check_sock, sp, sa_len);
-  if (rc < 0) {
-    err(ctx, "sub %p connect() failed\n", (void*)sub);
-    return handle_connect_error(ctx);
-  }
-
-  socklen_t got_len = sizeof(ss);
-  rc = getsockname(check_sock, sp, &got_len);
-  if (rc < 0) {
-    enum mcrx_error_code ret = handle_getsockname_error(ctx);
-    int prev_errno = errno;
-    if (close(check_sock) < 0) {
-      handle_close_error(ctx);
+  if (!sub->override_ifname) {
+    // extract the local interface by connecting a udp socket to the
+    // source and checking its local address.
+    int check_sock = socket(family, SOCK_DGRAM, IPPROTO_UDP);
+    if (check_sock < 0) {
+      err(ctx, "sub %p socket() failed\n", (void*)sub);
+      return handle_socket_error(ctx);
     }
-    errno = prev_errno;  // suppress close error, if present.
-    return ret;
-  }
+    info(ctx, "sub %p interface lookup socket created: %d\n",
+        (void*)sub, check_sock);
 
-  if (got_len != (socklen_t)sa_len) {
-    err(ctx, "sub %p getsockname addrlen got %d not %d\n",
-        (void*)sub, got_len, sa_len);
-    if (close(check_sock) < 0) {
-      handle_close_error(ctx);
+    rc = connect(check_sock, sp, sa_len);
+    if (rc < 0) {
+      err(ctx, "sub %p connect() failed\n", (void*)sub);
+      return handle_connect_error(ctx);
     }
-    return MCRX_ERR_INTERNAL_ERROR;
-  }
-  rc = close(check_sock);
-  if (rc < 0) {
-    char buf[1024];
-    wrap_strerr(errno, buf, sizeof(buf));
-    // we ignore this error because sometimes we're handed fd=0, as the
-    // socket fd, which produces a close error on mac. --jake 2019-06-28
-    warn(ctx, "sub %p ignoring source-if socket close(%d) error: %s\n",
-        (void*)sub, check_sock, buf);
-  }
 
-  // now sp is the local address for a socket that could send to
-  // the source, so use that to find the interface index (and for
-  // ipv6, a link-local address, since the MLD packets MUST be from a
-  // link-local address, failing this the message is silently ignored
-  // by a linux next-hop, as required at the top of:
-  // https://tools.ietf.org/html/rfc3810#section-5
+    socklen_t got_len = sizeof(ss);
+    rc = getsockname(check_sock, sp, &got_len);
+    if (rc < 0) {
+      enum mcrx_error_code ret = handle_getsockname_error(ctx);
+      int prev_errno = errno;
+      if (close(check_sock) < 0) {
+        handle_close_error(ctx);
+      }
+      errno = prev_errno;  // suppress close error, if present.
+      return ret;
+    }
 
-  char addr_buf[INET6_ADDRSTRLEN];
-  const char* loc_addr_str = inet_ntop(family, addr_p, addr_buf,
-      sizeof(addr_buf));
-  if (!loc_addr_str) {
-    return handle_ntop_error(ctx);
+    if (got_len != (socklen_t)sa_len) {
+      err(ctx, "sub %p getsockname addrlen got %d not %d\n",
+          (void*)sub, got_len, sa_len);
+      if (close(check_sock) < 0) {
+        handle_close_error(ctx);
+      }
+      return MCRX_ERR_INTERNAL_ERROR;
+    }
+    rc = close(check_sock);
+    if (rc < 0) {
+      char buf[1024];
+      wrap_strerr(errno, buf, sizeof(buf));
+      // we ignore this error because sometimes we're handed fd=0, as the
+      // socket fd, which produces a close error on mac. --jake 2019-06-28
+      warn(ctx, "sub %p ignoring source-if socket close(%d) error: %s\n",
+          (void*)sub, check_sock, buf);
+    }
+
+    // now sp is the local address for a socket that could send to
+    // the source, so use that to find the interface index (and for
+    // ipv6, a link-local address, since the MLD packets MUST be from a
+    // link-local address, failing this the message is silently ignored
+    // by a linux next-hop, as required at the top of:
+    // https://tools.ietf.org/html/rfc3810#section-5
+
+    char addr_buf[INET6_ADDRSTRLEN];
+    const char* loc_addr_str = inet_ntop(family, addr_p, addr_buf,
+        sizeof(addr_buf));
+    if (!loc_addr_str) {
+      return handle_ntop_error(ctx);
+    }
+
+    info(ctx, "got local sockaddr: %s\n", loc_addr_str);
   }
-
-  info(ctx, "got local sockaddr: %s\n", loc_addr_str);
 
   struct ifaddrs* all_addrs = 0;
   rc = getifaddrs(&all_addrs);
@@ -572,24 +575,38 @@ static enum mcrx_error_code mcrx_find_interface(
 
   struct ifaddrs* cur_ifa;
   struct ifaddrs* match_ifa = NULL;
+  unsigned int matching_idx = 0;
   for (cur_ifa = all_addrs; cur_ifa; cur_ifa = cur_ifa->ifa_next) {
     if (cur_ifa->ifa_addr) {
       if (cur_ifa->ifa_addr->sa_family == family) {
         void* check_addr = (void*)(((uint8_t*)cur_ifa->ifa_addr)+addr_offset);
-        rc = memcmp(addr_p, check_addr, addr_len);
+        if (sub->override_ifname) {
+          rc = strcmp(sub->override_ifname, cur_ifa->ifa_name);
+        } else {
+          // in this case, addr_p (pointing inside the memory for ss/sp)
+          // got overwritten with the local socket address by getsockname
+          // after a udp "connect" to the source ip.
+          rc = memcmp(addr_p, check_addr, addr_len);
+        }
         if (rc == 0) {
-          info(ctx, "found matching interface: %s(base)\n", cur_ifa->ifa_name);
           unsigned int idx = if_nametoindex(cur_ifa->ifa_name);
           if (idx == 0) {
             err(ctx, "failed if_nametoindex(%s)\n", cur_ifa->ifa_name);
           } else {
-            if (match_ifa) {
-              warn(ctx, "found alternate matching interface(%s replaces %s)\n",
+            if (!match_ifa || matching_idx != idx) {
+              if (!match_ifa) {
+                info(ctx, "found matching interface: %s(base)\n",
+                    cur_ifa->ifa_name);
+              } else {
+                warn(ctx,
+                  "found alternate matching interface(%s replaces %s)\n",
                   match_ifa->ifa_name, cur_ifa->ifa_name);
-            }
-            match_ifa = cur_ifa;
-            if (if_indexp) {
-              *if_indexp = idx;
+              }
+              match_ifa = cur_ifa;
+              matching_idx = idx;
+              if (if_indexp) {
+                *if_indexp = idx;
+              }
             }
           }
         }

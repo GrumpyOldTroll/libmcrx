@@ -617,6 +617,29 @@ MCRX_EXPORT struct mcrx_ctx* mcrx_subscription_get_ctx(
   return sub->ctx;
 }
 
+/**
+ * mcrx_subscription_override_ifname:
+ * @sub: mcrx subscription handle
+ * @ifname: name of interface on which to join
+ *
+ * Ordinarily, the subscription will join on the interface with the
+ * route toward the source IP, but this can be used to override the
+ * interface with a user-provided name.  The provided ifname must
+ * remain a valid pointer until the subscription is released or until
+ * overridden with a different ifname, and must be a 0-terminated string.
+ * This takes effect on the join, so leave/override/join can change
+ * interfaces.
+ **/
+MCRX_EXPORT void mcrx_subscription_override_ifname(
+    struct mcrx_subscription* sub,
+    const char* ifname) {
+  if (sub == NULL) {
+    return;
+  }
+
+  sub->override_ifname = ifname;
+}
+
 static int default_receive_cb(
     struct mcrx_packet* pkt) {
   struct mcrx_subscription* sub = mcrx_packet_get_subscription(pkt);

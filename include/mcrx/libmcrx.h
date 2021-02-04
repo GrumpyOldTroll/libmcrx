@@ -214,6 +214,9 @@ void mcrx_subscription_set_userdata(
     intptr_t userdata);
 struct mcrx_ctx* mcrx_subscription_get_ctx(
     struct mcrx_subscription* sub);
+void mcrx_subscription_override_ifname(
+    struct mcrx_subscription* sub,
+    const char* ifname);
 
 enum mcrx_error_code mcrx_subscription_new(
     struct mcrx_ctx* ctx,
