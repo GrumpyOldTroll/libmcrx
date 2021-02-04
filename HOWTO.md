@@ -29,7 +29,7 @@ In most cases for the [traffic people are sending on I2](https://multicastmenu.h
 vlc udp://129.174.131.51@233.44.15.9:50001
 ~~~
 
-## Running a multicast-capable network {#network}
+## Running A Multicast-capable Network
 
 If your ISP does not provide you a multicast network, it's still possible to set up a multicast network that can ingest traffic and then run your receivers on devices running within that network, as described in the section above.
 
@@ -51,6 +51,10 @@ vlc ~/Downloads/BigBuckBunny.mp4 --sout '#transcode {vcodec=h264,scale=Auto,acod
 ~~~
 
 ffmpeg:
+
+~~~
+ffmpeg -re -i ~/Downloads/BigBuckBunny.mp4 -c copy -f mpegts udp://232.10.1.12:1234?pkt_size=1316
+~~~
 
 When you run your own sender, it will generally output traffic on the interface with the default route, unless you've set up something more specific.
 

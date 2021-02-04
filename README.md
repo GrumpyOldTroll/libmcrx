@@ -72,7 +72,7 @@ make check
 
 ### Install
 
-Autoconf by default should build a configure and Makefiles that will put the headers and libraries into the default location for user libraries for the system.  This can be overridden by passing 
+Autoconf by default should build a configure and Makefiles that will put the headers and libraries into the default location for user libraries for the system.
 
 ~~~
 sudo make install
@@ -140,5 +140,5 @@ For an example integrating with an external event handler instead of using the b
 
 That project uses python's [asyncio](https://docs.python.org/3/library/asyncio.html) as the event handling library, and exports sockets to be added to the list of sockets to monitor for read readiness via mcrx_ctx_set_receive_socket_handlers, rather than using the blocking mcrx_ctx_receive_packets call.
 
-In that scenario, the calling system is responsible for making a timely call to the do_receive function for all the sockets that have been given to the calling system with the add_socket_cb callback, an that have not yet been removed with the remove_socket_cb callback.
+In that scenario, the calling system is responsible for making a timely call to the do_receive function for all the sockets that have been given to the calling system with the add_socket_cb callback and that have not yet been removed with the remove_socket_cb callback.
 
