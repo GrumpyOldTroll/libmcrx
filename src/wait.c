@@ -153,6 +153,11 @@ MCRX_EXPORT enum mcrx_error_code mcrx_ctx_receive_packets(
       nevents, ctx->nevents, ctx->ntriggered);
 
   if (nevents < 0) {
+    if (errno == EINTR) {
+      // treat interrupts like a timeout (and don't report error)
+      return MCRX_ERR_TIMEDOUT;
+    }
+
     err(ctx, "ctx %p failed kevent(%d)\n", (void*)ctx, ctx->wait_fd);
     return handle_kevent_error(ctx);
   }
@@ -501,6 +506,10 @@ MCRX_EXPORT enum mcrx_error_code mcrx_ctx_receive_packets(
       nevents, ctx->nevents, ctx->ntriggered);
 
   if (nevents < 0) {
+    if (errno == EINTR) {
+      // treat interrupts like a timeout (and don't report error)
+      return MCRX_ERR_TIMEDOUT;
+    }
     return handle_epollwait_error(ctx);
   }
 
