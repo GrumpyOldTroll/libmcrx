@@ -6,6 +6,7 @@ MAINTAINERCLEANFILES = Makefile.in aclocal.m4 build-aux/compile \
             build-aux/install-sh build-aux/ltmain.sh build-aux/missing \
             config.h.in config.h.in~ configure m4/libtool.m4 m4/ltoptions.m4 \
             m4/ltsugar.m4 m4/ltversion.m4 m4/lt~obsolete.m4
+MOSTLYCLEANFILES =
 AM_MAKEFLAGS = --no-print-directory
 
 # https://linux.die.net/man/7/feature_test_macros
@@ -40,17 +41,26 @@ LIBMCRX_REVISION=0
 LIBMCRX_AGE=2
 
 pkginclude_HEADERS = include/mcrx/libmcrx.h include/mcrx/errors.h
-lib_LTLIBRARIES = src/libmcrx.la
+lib_LTLIBRARIES = libmcrx.la
+lib_LIBRARIES = libmcrx.a
+noinst_PROGRAMS = mcrx-check
 
-src_libmcrx_la_SOURCES =\
+libmcrx_la_SOURCES =\
 	src/libmcrx-private.h \
 	src/libmcrx.c \
 	src/native.c \
 	src/wait.c
+libmcrx_la_CFLAGS = $(AM_CFLAGS)
+
+libmcrx_a_SOURCES = $(libmcrx_la_SOURCES)
+libmcrx_a_CFLAGS = $(AM_CFLAGS)
+
+mcrx_check_SOURCES = test/mcrx-check.c
+mcrx_check_LDADD = libmcrx.a
 
 # with thanks:
 # https://stackoverflow.com/questions/29811970/adding-linting-to-autotools-based-build-system
-LINTFILES = $(src_libmcrx_la_SOURCES) $(pkginclude_HEADERS)
+LINTFILES = $(libmcrx_la_SOURCES) $(pkginclude_HEADERS)
 LINTTARGETS = $(LINTFILES:%=%.lint)
 
 lint: $(LINTTARGETS)
@@ -62,11 +72,15 @@ all-local: lint
 
 .PHONY: lint
 
+# following hints from:
+# https://www.gnu.org/software/automake/manual/html_node/Clean.html
+MOSTLYCLEANFILES += $(LINTTARGETS)
+
 EXTRA_DIST += src/libmcrx.sym
 
-src_libmcrx_la_LDFLAGS = $(AM_LDFLAGS) \
+libmcrx_la_LDFLAGS = $(AM_LDFLAGS) \
 	-version-info $(LIBMCRX_CURRENT):$(LIBMCRX_REVISION):$(LIBMCRX_AGE)
-src_libmcrx_la_DEPENDENCIES = ${top_srcdir}/src/libmcrx.sym
+libmcrx_la_DEPENDENCIES = ${top_srcdir}/src/libmcrx.sym
 
 pkgconfigdir = $(libdir)/pkgconfig
 nodist_pkgconfig_DATA = src/libmcrx.pc
@@ -79,12 +93,13 @@ check_PROGRAMS = \
 		 test/test1-libmcrx \
 		 test/test-logstr \
 		 test/test-rejoin-same
+
 test_test1_libmcrx_SOURCES = test/test1-libmcrx.c
-test_test1_libmcrx_LDADD = src/libmcrx.la
+test_test1_libmcrx_LDADD = libmcrx.a
 
 test_test_rejoin_same_SOURCES = test/test-rejoin-same.c
-test_test_rejoin_same_LDADD = src/libmcrx.la
+test_test_rejoin_same_LDADD = libmcrx.a
 
 test_test_logstr_SOURCES = test/test-logstr.c
-test_test_logstr_LDADD = src/libmcrx.la
+test_test_logstr_LDADD = libmcrx.a
 

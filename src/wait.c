@@ -81,6 +81,9 @@ static enum mcrx_error_code handle_kqueue_error_impl(
  * timeout_ms = -1 to timeout never, or timeout_ms=0 to return
  * immediately even if there were no packets.
  *
+ * Applications that use this function cannot use
+ * mcrx_ctx_set_receive_socket_handlers.
+ *
  * Returns: error code on problem, EAGAIN if timeout reached
  */
 MCRX_EXPORT enum mcrx_error_code mcrx_ctx_receive_packets(

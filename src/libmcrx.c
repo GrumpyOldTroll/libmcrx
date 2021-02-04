@@ -160,6 +160,17 @@ MCRX_EXPORT void mcrx_ctx_set_log_fn(
       (uintptr_t)log_fn, (uintptr_t)old_log_fn);
 }
 
+/**
+ * mcrx_ctx_set_log_string_fn:
+ * @ctx: mcrx library context
+ * @string_log_fn: function to be called for logging messages
+ *
+ * This can be used instead of mcrx_ctx_set_log_fn to
+ * register a callback that takes a fully-formed string instead
+ * of a va_list.  It is not possible to use both log_fn and
+ * log_string_fn, use of either will override the other.
+ *
+ **/
 MCRX_EXPORT void mcrx_ctx_set_log_string_fn(
     struct mcrx_ctx *ctx,
     void (*string_log_fn)(
@@ -191,6 +202,18 @@ MCRX_EXPORT void mcrx_ctx_set_log_string_fn(
       (uintptr_t)string_log_fn, (uintptr_t)old_string_log_fn);
 }
 
+/**
+ * mcrx_cts_log_msg:
+ * @ctx: mcrx library context
+ * @prio: log level
+ * @file: filename to report (usually __FILE__)
+ * @line: line number to report (usually __LINE__)
+ * @fn: function to report (usually __function__)
+ * @msg: message to log
+ *
+ * This feeds a message into the logging system, as if the
+ * libmcrx library generated an error or warning message.
+ */
 MCRX_EXPORT void mcrx_ctx_log_msg(
     struct mcrx_ctx *ctx,
     enum mcrx_log_priority prio,
@@ -257,6 +280,27 @@ MCRX_EXPORT void mcrx_ctx_set_userdata(
   ctx->userdata = userdata;
 }
 
+/**
+ * mcrx_set_recive_socket_handlers:
+ * @ctx: mcrx library context
+ * @add_socket_cb: callback when a socket is added
+ * @remove_socket_cb: callback when a socket is removed
+ *
+ * This can be used to integrate with event loops that do not
+ * play will with making a blocking call in a dedicated thread to
+ * receive the libmcrx packets.  This will expose the sockets to
+ * the calling program, so they can be used in select/epoll/kevent/etc.
+ * for receive events.  After a receive event on the libmcrx sockets
+ * reported by these callbacks, the do_receive function pointer
+ * provided by the add_socket_cb should be invoked with the handle
+ * parameter provided by the add_socket_cb and the fd.
+ *
+ * Applications that use this function cannot use
+ * mcrx_ctx_receive_packets with the same ctx, and instead must process
+ * socket receive events for this ctx with the given do_receive
+ * functions (which are non-blocking, and invoke the subscription
+ * packet receive callbacks).
+ */
 MCRX_EXPORT enum mcrx_error_code mcrx_ctx_set_receive_socket_handlers(
     struct mcrx_ctx *ctx,
     int (*add_socket_cb)(
