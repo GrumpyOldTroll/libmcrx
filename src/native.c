@@ -477,6 +477,9 @@ static enum mcrx_error_code mcrx_find_interface(
       struct sockaddr_in* sp4 = (struct sockaddr_in*)sp;
       sp4->sin_family = AF_INET;
       sp4->sin_addr = sub->input.addrs.v4.source;
+      // NB: no packets are generated or received on this socket, so the
+      // port doesn't ever appear on the network.  But it still must be
+      // a user-space port, so the socket can be created.
       sp4->sin_port = htons(5001);
       sa_len = sizeof(struct sockaddr_in);
       // ((struct sockaddr_in*)sp)->sin_len = sa_len;
@@ -490,6 +493,9 @@ static enum mcrx_error_code mcrx_find_interface(
       struct sockaddr_in6* sp6 = (struct sockaddr_in6*)sp;
       sp6->sin6_family = AF_INET6;
       sp6->sin6_addr = sub->input.addrs.v6.source;
+      // NB: no packets are generated or received on this socket, so the
+      // port doesn't ever appear on the network.  But it still must be
+      // a user-space port, so the socket can be created.
       sp6->sin6_port = htons(5001);
       sa_len = sizeof(struct sockaddr_in6);
       // ((struct sockaddr_in6*)sp)->sin6_len = sa_len;

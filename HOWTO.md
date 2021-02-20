@@ -64,7 +64,7 @@ Usually this usage requires no special setup, if the LAN allows multicast traffi
 Another good way is to run a virtual machine, and to send traffic between the host and the virtual machine.
 This often requires adjusting the routing table on the sender to ensure the traffic goes to the right interface.
 
-For example, when using a Mac, I often install [Virtualbox]() and set up a [host-only adapter](https://www.virtualbox.org/manual/ch06.html#network_hostonly) for the guest machine, and install a linux distro.
+For example, when using a Mac, I often install [Virtualbox](https://www.virtualbox.org/wiki/Downloads) and set up a [host-only adapter](https://www.virtualbox.org/manual/ch06.html#network_hostonly) for the guest machine, and install a linux distro.
 In this example, the guest IP is `192.168.56.101`, and the host IP for the host-only network is `192.168.56.1`.
 
 Then, if you want to send traffic from the guest to the host, you can run the above ffmpeg command on the linux guest, but you'll have to set the route so the traffic goes out the host-only adapter:
@@ -126,7 +126,7 @@ There's a few different ways that can work.
 
 #### Discovering A Relay From The Traffic's Source IP
 
-There is some live traffic and with associated [AMTRELAY](https://www.rfc-editor.org/rfc/rfc8777.html) DNS records for the source's reverse IP domain name.
+There is some live traffic with associated [AMTRELAY](https://www.rfc-editor.org/rfc/rfc8777.html) DNS records for the source's reverse IP domain name.
 Akamai runs some traffic this way and other sources might advertise relays this way as well.
 
 AMT relays for traffic like this can be discovered with [driad.py](https://github.com/GrumpyOldTroll/libmcrx/driad.py).
@@ -195,7 +195,7 @@ docker start amtgw
 ~~~
 
 NB: note that a [docker issue](https://github.com/moby/moby/issues/25181) causes the interface ordering to be determined by their lexical name, not the order they're added.
-So in this example, it's important to ensure that the macvlan's name is lexcially later than `docker0` so that it's mapped inside the amtgw container, the output network is mapped to eth1 instead of eth0, since in that container eth0 is used for the AMT and DNS traffic and eth1 is used for the multicast output.
+So in this example, it's important to ensure that the macvlan's name is lexically later than `docker0` so that it's mapped inside the amtgw container, the output network is mapped to eth1 instead of eth0, since in that container eth0 is used for the AMT and DNS traffic and eth1 is used for the multicast output.
 
 Note that for a VM, forwarding traffic into the LAN doesn't have to mean onto a wire, it can be forwarded into a host-only adapter from a guest to send traffic to the host machine or another guest machine sharing the host-only network.
 This can be a useful way to work with multicast in a development environment.
