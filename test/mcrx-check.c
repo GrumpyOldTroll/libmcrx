@@ -222,9 +222,9 @@ main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
   int level = MCRX_LOGLEVEL_WARNING;
-  if (verbose > 1) {
+  if (verbose > 2) {
     level = MCRX_LOGLEVEL_DEBUG;
-  } else if (verbose > 0) {
+  } else if (verbose > 1) {
     level = MCRX_LOGLEVEL_INFO;
   }
   mcrx_ctx_set_log_priority(ctx, level);
@@ -284,11 +284,13 @@ main(int argc, char *argv[]) {
       double total_dur = difftime(now, info.start_time);
       struct tm *loc_time;
       last_msg_time = now;
-      char tbuf[80];
-      loc_time = localtime(&now);
-      strftime(tbuf,sizeof(tbuf),"%m-%d %H:%M:%S", loc_time);
-      printf("%s: joined to %s->%s:%d for %gs, %u pkts received\n",
-          tbuf, source, group, (int)port, total_dur, info.got_packets);
+      if (verbose > 0) {
+        char tbuf[80];
+        loc_time = localtime(&now);
+        strftime(tbuf,sizeof(tbuf),"%m-%d %H:%M:%S", loc_time);
+        printf("%s: joined to %s->%s:%d for %gs, %u pkts received\n",
+            tbuf, source, group, (int)port, total_dur, info.got_packets);
+      }
     }
   } while (!err || err == MCRX_ERR_TIMEDOUT);
 
