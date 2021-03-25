@@ -476,7 +476,11 @@ static enum mcrx_error_code mcrx_find_interface(
       family = AF_INET;
       struct sockaddr_in* sp4 = (struct sockaddr_in*)sp;
       sp4->sin_family = AF_INET;
-      sp4->sin_addr = sub->input.addrs.v4.source;
+      if (sub->mnat_entry == NULL) {
+        sp4->sin_addr = sub->input.addrs.v4.source;
+      } else {
+    	sp4->sin_addr = sub->mnat_entry->local_addrs.v4.source;
+      }
       // NB: no packets are generated or received on this socket, so the
       // port doesn't ever appear on the network.  But it still must be
       // a user-space port, so the socket can be created.
@@ -492,7 +496,11 @@ static enum mcrx_error_code mcrx_find_interface(
       family = AF_INET6;
       struct sockaddr_in6* sp6 = (struct sockaddr_in6*)sp;
       sp6->sin6_family = AF_INET6;
-      sp6->sin6_addr = sub->input.addrs.v6.source;
+      if (sub->mnat_entry == NULL) {
+        sp6->sin6_addr = sub->input.addrs.v6.source;
+      } else {
+    	sp6->sin6_addr = sub->mnat_entry->local_addrs.v6.source;
+      }
       // NB: no packets are generated or received on this socket, so the
       // port doesn't ever appear on the network.  But it still must be
       // a user-space port, so the socket can be created.
@@ -999,10 +1007,18 @@ enum mcrx_error_code mcrx_subscription_native_join(
       struct sockaddr_in sin4_group = {0};
       sin4_group.sin_port = htons(sub->input.port);
       sin4_group.sin_family = AF_INET;
-      sin4_group.sin_addr = sub->input.addrs.v4.group;
+      if (sub->mnat_entry == NULL) {
+        sin4_group.sin_addr = sub->input.addrs.v4.group;
+      } else {
+    	sin4_group.sin_addr = sub->mnat_entry->local_addrs.v4.group;
+      }
 
       sin4_source->sin_family = AF_INET;
-      sin4_source->sin_addr = sub->input.addrs.v4.source;
+      if (sub->mnat_entry == NULL) {
+        sin4_source->sin_addr = sub->input.addrs.v4.source;
+      } else {
+    	sin4_source->sin_addr = sub->mnat_entry->local_addrs.v4.source;
+      }
 #if BSD
       sin4_group.sin_len = sizeof(struct sockaddr_in);
       sin4_source->sin_len = sizeof(struct sockaddr_in);
@@ -1093,10 +1109,18 @@ enum mcrx_error_code mcrx_subscription_native_join(
       struct sockaddr_in6 sin6_group = {0};
       sin6_group.sin6_port = htons(sub->input.port);
       sin6_group.sin6_family = AF_INET6;
-      sin6_group.sin6_addr = sub->input.addrs.v6.group;
+      if (sub->mnat_entry == NULL) {
+        sin6_group.sin6_addr = sub->input.addrs.v6.group;
+      } else {
+    	sin6_group.sin6_addr = sub->mnat_entry->local_addrs.v6.group;
+      }
 
       sin6_source->sin6_family = AF_INET6;
-      sin6_source->sin6_addr = sub->input.addrs.v6.source;
+      if (sub->mnat_entry == NULL) {
+        sin6_source->sin6_addr = sub->input.addrs.v6.source;
+      } else {
+    	sin6_source->sin6_addr = sub->mnat_entry->local_addrs.v6.source;
+      }
 #if BSD
       sin6_group.sin6_len = sizeof(struct sockaddr_in6);
       sin6_source->sin6_len = sizeof(struct sockaddr_in6);

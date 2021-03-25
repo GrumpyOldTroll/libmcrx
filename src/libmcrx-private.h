@@ -102,6 +102,7 @@ void mcrx_log(struct mcrx_ctx *ctx, enum mcrx_log_priority priority,
     const char *file, int line, const char *fn, const char *format, ...)
     __attribute__((format(printf, 6, 7)));
 
+
 /**
  * mcrx_packet:
  *
@@ -134,12 +135,41 @@ struct mcrx_subscription {
   int (*receive_cb)(struct mcrx_packet* packet);
   int joined;
   const char* override_ifname;
+  struct mcrx_mnat_entry *mnat_entry;
 };
 
 enum mcrx_socket_handling_state {
   MCRX_SOCKHANDLER_UNCOMMITTED,
   MCRX_SOCKHANDLER_BUILTIN,
   MCRX_SOCKHANDLER_EXTERNAL
+};
+
+/**
+ * mcrx_mnat_entry:
+ *
+ * Opaque object representing a mnat entry.
+ */
+struct mcrx_mnat_entry {
+  LIST_ENTRY(mcrx_mnat_entry) mnat_entries;
+  enum MCRX_ADDR_TYPE addr_type;
+  union {
+      struct mcrx_subscription_addrs_v4 v4;
+      struct mcrx_subscription_addrs_v6 v6;
+  } local_addrs;
+  union {
+      struct mcrx_subscription_addrs_v4 v4;
+      struct mcrx_subscription_addrs_v6 v6;
+  } global_addrs;
+};
+
+/**
+ * mcrx_mnat_ctx:
+ *
+ * Opaque object representing a mnat context.
+ */
+struct mcrx_mnat_ctx {
+  int refcount;
+  LIST_HEAD(mnat_listhead, mcrx_mnat_entry) mnats_head;
 };
 
 /**
@@ -158,6 +188,7 @@ struct mcrx_ctx {
   intptr_t userdata;
   enum mcrx_log_priority log_priority;
   LIST_HEAD(listhead, mcrx_subscription) subs_head;
+  struct mcrx_mnat_ctx *mnat_ctx;
   int timeout_ms;
   int wait_fd;
   sigset_t wait_sigmask;
