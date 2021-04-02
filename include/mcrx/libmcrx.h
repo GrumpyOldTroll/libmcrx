@@ -48,20 +48,12 @@ struct mcrx_ctx;
  */
 struct mcrx_subscription;
 
-
-/**
- * mcrx_mnat_entry:
- *
- * mnat entry.
- */
-struct mcrx_mnat_entry;
-
 /**
  * mcrx_mnat_ctx:
  *
  * mnat context handle.
  */
-struct mcrx_mnat_ctx;
+struct mcrx_mnatmap;
 
 /**
  * mcrx_packet:
@@ -240,28 +232,21 @@ enum mcrx_error_code mcrx_subscription_new(
     struct mcrx_subscription** subp);
 
 
-enum mcrx_error_code mcrx_mnat_ctx_new(struct mcrx_mnat_ctx **mnatctxp);
-struct mcrx_mnat_ctx* mcrx_mnat_ctx_ref(struct mcrx_mnat_ctx *mnatctx);
-struct mcrx_mnat_ctx* mcrx_mnat_ctx_unref(struct mcrx_mnat_ctx *mnatctx);
-enum mcrx_error_code mcrx_mnat_ctx_add_entry(struct mcrx_mnat_ctx *mnatctx,
-    const char *global_source, const char *global_group,
-    const char *local_source, const char *local_group);
-enum mcrx_error_code mcrx_mnat_ctx_update_entry(struct mcrx_mnat_ctx *mnatctx,
-    const char *global_source, const char *global_group,
-    const char *local_source, const char *local_group);
-enum mcrx_error_code mcrx_mnat_ctx_remove_entry(struct mcrx_mnat_ctx *mnatctx,
-    const char *global_source, const char *global_group);
-struct mcrx_mnat_entry* mcrx_mnat_ctx_find_entry(struct mcrx_mnat_ctx *mnatctx,
-    const char *global_source, const char *global_group);
+enum mcrx_error_code mcrx_mnat_ctx_new(struct mcrx_mnatmap **mnatmapp);
+struct mcrx_mnatmap* mcrx_mnat_ctx_ref(struct mcrx_mnatmap *mnatmap);
+struct mcrx_mnatmap* mcrx_mnat_ctx_unref(struct mcrx_mnatmap *mnatmap);
+enum mcrx_error_code mcrx_mnat_ctx_add_or_update_mapping(
+    struct mcrx_mnatmap *mnatmap,
+    const struct mcrx_subscription_config *global_address,
+    const struct mcrx_subscription_config *local_address);
+enum mcrx_error_code mcrx_mnat_ctx_remove_mapping(struct mcrx_mnatmap *mnatmap,
+    const struct mcrx_subscription_config *global_address);
+enum mcrx_error_code mcrx_mnat_ctx_get_mapping(struct mcrx_mnatmap *mnatmap,
+    const struct mcrx_subscription_config *global_address,
+    struct mcrx_subscription_config *local_address);
 enum mcrx_error_code mcrx_mnat_ctx_apply(struct mcrx_ctx *ctx,
-    struct mcrx_mnat_ctx *mnatctxp);
-struct mcrx_mnat_entry* mcrx_mnat_ctx_find_entry_from_subscription(
-    struct mcrx_subscription *sub, struct mcrx_mnat_ctx *mnatctx);
-enum mcrx_error_code mcrx_mnat_ctx_clone(struct mcrx_mnat_ctx *mnatctx_src,
-    struct mcrx_mnat_ctx **mnatctxp_dest);
-bool mcrx_mnat_ctx_entry_unresolved(struct mcrx_mnat_entry* entry);
-bool mcrx_mnat_ctx_entry_local_equal(struct mcrx_mnat_entry* entry_src, struct mcrx_mnat_entry* entry_dest);
-bool mcrx_mnat_ctx_entry_global_equal(struct mcrx_mnat_entry* entry_src, struct mcrx_mnat_entry* entry_dest);
+    struct mcrx_mnatmap *mnatmapp);
+
 /*
  * at entry to receive_cb, mcrx_packet_get_userdata returns the
  * same as mcrx_subscription_get_userdata for the sub.

@@ -102,7 +102,6 @@ void mcrx_log(struct mcrx_ctx *ctx, enum mcrx_log_priority priority,
     const char *file, int line, const char *fn, const char *format, ...)
     __attribute__((format(printf, 6, 7)));
 
-
 /**
  * mcrx_packet:
  *
@@ -163,11 +162,11 @@ struct mcrx_mnat_entry {
 };
 
 /**
- * mcrx_mnat_ctx:
+ * mcrx_mnat_map:
  *
  * Opaque object representing a mnat context.
  */
-struct mcrx_mnat_ctx {
+struct mcrx_mnatmap {
   int refcount;
   LIST_HEAD(mnat_listhead, mcrx_mnat_entry) mnats_head;
 };
@@ -188,7 +187,7 @@ struct mcrx_ctx {
   intptr_t userdata;
   enum mcrx_log_priority log_priority;
   LIST_HEAD(listhead, mcrx_subscription) subs_head;
-  struct mcrx_mnat_ctx *mnat_ctx;
+  struct mcrx_mnatmap *mnat_map;
   int timeout_ms;
   int wait_fd;
   sigset_t wait_sigmask;
@@ -241,6 +240,16 @@ void wrap_strerr(
     int err_no,
     char* buf,
     int len);
+
+struct mcrx_mnat_entry* mcrx_mnat_ctx_find_entry(struct mcrx_mnatmap *mnatmap,
+    const struct mcrx_subscription_config *global_address);
+struct mcrx_mnat_entry* mcrx_mnat_ctx_find_entry_from_subscription(
+    struct mcrx_subscription *sub, struct mcrx_mnatmap *mnatmap);
+enum mcrx_error_code mcrx_mnat_ctx_clone(struct mcrx_mnatmap *mnatmap_src,
+    struct mcrx_mnatmap **mnatmapp_dest);
+bool mcrx_mnat_ctx_entry_unresolved(struct mcrx_mnat_entry* entry);
+bool mcrx_mnat_ctx_entry_local_equal(struct mcrx_mnat_entry* entry_src, struct mcrx_mnat_entry* entry_dest);
+bool mcrx_mnat_ctx_entry_global_equal(struct mcrx_mnat_entry* entry_src, struct mcrx_mnat_entry* entry_dest);
 
 enum mcrx_error_code handle_close_error_impl(
     struct mcrx_ctx* ctx,

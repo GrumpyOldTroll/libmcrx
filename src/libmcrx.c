@@ -507,8 +507,8 @@ MCRX_EXPORT struct mcrx_ctx *mcrx_ctx_unref(
     ctx->wait_fd = -1;
   }
 
-  if (ctx->mnat_ctx != NULL) {
-    mcrx_mnat_ctx_unref(ctx->mnat_ctx);
+  if (ctx->mnat_map != NULL) {
+    mcrx_mnat_ctx_unref(ctx->mnat_map);
   }
 
   info(ctx, "context %p released\n", (void *)ctx);
@@ -793,10 +793,11 @@ MCRX_EXPORT void mcrx_subscription_set_receive_cb(
  **/
 MCRX_EXPORT enum mcrx_error_code mcrx_subscription_join(
     struct mcrx_subscription* sub) {
-  if (sub && sub->ctx && sub->ctx->mnat_ctx) {
-    sub->mnat_entry = mcrx_mnat_ctx_find_entry_from_subscription(sub, sub->ctx->mnat_ctx);
+  if (sub && sub->ctx && sub->ctx->mnat_map) {
+    sub->mnat_entry = mcrx_mnat_ctx_find_entry_from_subscription(sub, sub->ctx->mnat_map);
     if (sub->mnat_entry == NULL || mcrx_mnat_ctx_entry_unresolved(sub->mnat_entry)) {
       // if we can not find a mnap entry or the entry is unresolved for local address
+      info(sub->ctx, "can not find resolved mnat entry for subscription %p\n", (void *)sub);
       return MCRX_ERR_UNSUPPORTED;
     }
   }
@@ -1015,10 +1016,8 @@ mcrx_strerror(enum mcrx_error_code err) {
       return "mcrx: already not joined";
     case MCRX_ERR_INTERNAL_ERROR:
       return "mcrx: internal library error";
-    case MCRX_ERR_ALREADY_EXISTED:
-      return "mcrx: already existed";
-    case MCRX_ERR_NOT_EXISTED:
-      return "mcrx: not existed";
+    case MNAT_ENTRY_NOT_FOUND:
+      return "mcrx: mnat entry not found";
     case MCRX_ERR_CALLBACK_FAILED:
       return "mcrx: callback failed";
     case MCRX_ERR_NOTHING_JOINED:
@@ -1078,20 +1077,20 @@ mcrx_is_system_error(enum mcrx_error_code err) {
 
 /**
  * mcrx_mnat_ctx_new:
- * @mnatctxp: pointer to be filled with the new mnat context
+ * @mnatmapp: pointer to be filled with the new mnat context
  *
  * Create a new mnat context.
  *
  * Returns: error code
  **/
 MCRX_EXPORT enum mcrx_error_code mcrx_mnat_ctx_new(
-    struct mcrx_mnat_ctx **mnatctxp) {
-  if (mnatctxp == NULL) {
+    struct mcrx_mnatmap **mnatmapp) {
+  if (mnatmapp == NULL) {
     return MCRX_ERR_NULLARG;
   }
 
-  struct mcrx_mnat_ctx *mnat_ctx;
-  mnat_ctx = calloc(1, sizeof(struct mcrx_mnat_ctx));
+  struct mcrx_mnatmap *mnat_ctx;
+  mnat_ctx = calloc(1, sizeof(struct mcrx_mnatmap));
   if (!mnat_ctx) {
     return MCRX_ERR_NOMEM;
   }
@@ -1099,7 +1098,7 @@ MCRX_EXPORT enum mcrx_error_code mcrx_mnat_ctx_new(
   mnat_ctx->refcount = 1;
   LIST_INIT(&mnat_ctx->mnats_head);
 
-  *mnatctxp = mnat_ctx;
+  *mnatmapp = mnat_ctx;
   return MCRX_ERR_OK;
 }
 
@@ -1109,16 +1108,39 @@ MCRX_EXPORT enum mcrx_error_code mcrx_mnat_ctx_new(
  *
  **/
 MCRX_EXPORT enum mcrx_error_code mcrx_mnat_ctx_apply(struct mcrx_ctx *ctx,
-    struct mcrx_mnat_ctx *mnatctx) {
+    struct mcrx_mnatmap *mnatmap) {
   if (ctx == NULL) {
     return MCRX_ERR_NULLARG;
   }
-  if (ctx->mnat_ctx == NULL) {
+  if (ctx->mnat_map == NULL) {
     // no mnat running time mcrx context yet
-    mcrx_mnat_ctx_clone(mnatctx, &ctx->mnat_ctx);
+    mcrx_mnat_ctx_clone(mnatmap, &ctx->mnat_map);
+    struct mcrx_subscription *sub;
+    LIST_FOREACH(sub, &ctx->subs_head, sub_entries)
+    {
+      // find new entry based on the new mnat context
+      struct mcrx_mnat_entry *new_entry =
+          mcrx_mnat_ctx_find_entry_from_subscription(sub, ctx->mnat_map);
+      if (sub->joined) {
+        if (new_entry == NULL
+            || !mcrx_mnat_ctx_entry_local_equal(sub->mnat_entry, new_entry)) {
+          mcrx_subscription_leave(sub);
+          sub->mnat_entry = new_entry;
+          if (sub->mnat_entry
+              && !mcrx_mnat_ctx_entry_unresolved(sub->mnat_entry)) {
+            // rejoin with new entry
+            info(sub->ctx, "subscription %p rejoin new mnat entry %p\n", (void *)sub, (void*)sub->mnat_entry);
+            enum mcrx_error_code err = mcrx_subscription_native_join(sub);
+            if (err == MCRX_ERR_OK) {
+              ctx->live_subs++;
+            }
+          }
+        }
+      }
+    }
   } else {
-    struct mcrx_mnat_ctx *clone_context;
-    mcrx_mnat_ctx_clone(mnatctx, &clone_context);
+    struct mcrx_mnatmap *clone_context;
+    mcrx_mnat_ctx_clone(mnatmap, &clone_context);
     struct mcrx_subscription *sub;
     LIST_FOREACH(sub, &ctx->subs_head, sub_entries) {
       // find new entry based on the new mnat context
@@ -1130,6 +1152,7 @@ MCRX_EXPORT enum mcrx_error_code mcrx_mnat_ctx_apply(struct mcrx_ctx *ctx,
           if (sub->mnat_entry
               && !mcrx_mnat_ctx_entry_unresolved(sub->mnat_entry)) {
             // rejoin with new entry
+            info(sub->ctx, "subscription %p rejoin new mnat entry %p\n", (void *)sub, (void*)sub->mnat_entry);
             enum mcrx_error_code err = mcrx_subscription_native_join(sub);
             if (err == MCRX_ERR_OK) {
               ctx->live_subs++;
@@ -1147,12 +1170,42 @@ MCRX_EXPORT enum mcrx_error_code mcrx_mnat_ctx_apply(struct mcrx_ctx *ctx,
       }
     }
     // replace the run time mnat context
-    mcrx_mnat_ctx_unref(ctx->mnat_ctx);
-    ctx->mnat_ctx = clone_context;
+    mcrx_mnat_ctx_unref(ctx->mnat_map);
+    ctx->mnat_map = clone_context;
   }
 
-  info(ctx, "mnat context %p apply\n", (void* )mnatctx);
+  info(ctx, "mnat context %p apply\n", (void* )mnatmap);
 
+  return MCRX_ERR_OK;
+}
+
+/**
+ * mcrx_mnat_ctx_get_mapping:
+ *
+ * Retrieve the mcrx mnat local addresses based on global source and group addresses.
+ *
+ **/
+MCRX_EXPORT enum mcrx_error_code mcrx_mnat_ctx_get_mapping(
+    struct mcrx_mnatmap *mnatmap, const struct mcrx_subscription_config *global_address,
+    struct mcrx_subscription_config *local_address) {
+  if (global_address == NULL || local_address == NULL) {
+      return MCRX_ERR_NULLARG;
+  }
+  struct mcrx_mnat_entry *entry = mcrx_mnat_ctx_find_entry(mnatmap, global_address);
+  if (entry == NULL) {
+    return MNAT_ENTRY_NOT_FOUND;
+  }
+  if (entry->addr_type == MCRX_ADDR_TYPE_V4) {
+    local_address->addr_type = entry->addr_type;
+    memcpy(&local_address->addrs.v4.source, &entry->local_addrs.v4.source, sizeof(struct in_addr));
+    memcpy(&local_address->addrs.v4.group, &entry->local_addrs.v4.group, sizeof(struct in_addr));
+  } else {
+    local_address->addr_type = entry->addr_type;
+    memcpy(&local_address->addrs.v6.source, &entry->local_addrs.v6.source,
+        sizeof(struct in6_addr));
+    memcpy(&local_address->addrs.v6.group, &entry->local_addrs.v6.group,
+        sizeof(struct in6_addr));
+  }
   return MCRX_ERR_OK;
 }
 
@@ -1162,42 +1215,24 @@ MCRX_EXPORT enum mcrx_error_code mcrx_mnat_ctx_apply(struct mcrx_ctx *ctx,
  * Retrieve the mcrx mnat entry based on global source and group addresses.
  *
  **/
-MCRX_EXPORT struct mcrx_mnat_entry* mcrx_mnat_ctx_find_entry(
-    struct mcrx_mnat_ctx *mnatctx, const char *global_source,
-    const char *global_group) {
+struct mcrx_mnat_entry* mcrx_mnat_ctx_find_entry(
+    struct mcrx_mnatmap *mnatmap, const struct mcrx_subscription_config *global_address) {
   struct mcrx_mnat_entry *entry = NULL;
-  if (global_source == NULL || global_group == NULL) {
+  if (global_address == NULL) {
     return entry;
   }
-  LIST_FOREACH(entry, &mnatctx->mnats_head, mnat_entries) {
-    int af;
-    const void *src, *grp;
-    char src_buf[INET6_ADDRSTRLEN];
-    char grp_buf[INET6_ADDRSTRLEN];
-    switch (entry->addr_type) {
-    case MCRX_ADDR_TYPE_V4:
-      af = AF_INET;
-      src = &entry->global_addrs.v4.source;
-      grp = &entry->global_addrs.v4.group;
-      break;
-    case MCRX_ADDR_TYPE_V6:
-      af = AF_INET6;
-      src = &entry->global_addrs.v6.source;
-      grp = &entry->global_addrs.v6.group;
-      break;
-    default:
-      continue;
+  LIST_FOREACH(entry, &mnatmap->mnats_head, mnat_entries) {
+    if (entry->addr_type == MCRX_ADDR_TYPE_V4 && global_address->addr_type == MCRX_ADDR_TYPE_V4 &&
+        memcmp(&entry->global_addrs.v4.source, &global_address->addrs.v4.source, sizeof(struct in_addr)) == 0 &&
+        memcmp(&entry->global_addrs.v4.group, &global_address->addrs.v4.group, sizeof(struct in_addr)) == 0) {
+        return entry;
     }
-    const char *src_str = inet_ntop(af, src, src_buf, sizeof(src_buf));
-    if (src_str == NULL) {
-      continue;
-    }
-    const char *grp_str = inet_ntop(af, grp, grp_buf, sizeof(grp_buf));
-    if (grp_str == NULL) {
-      continue;
-    }
-    if (strcmp(src_str, global_source) == 0
-        && strcmp(grp_str, global_group) == 0) {
+    if (entry->addr_type == MCRX_ADDR_TYPE_V6
+        && global_address->addr_type == MCRX_ADDR_TYPE_V6
+        && memcmp(&entry->global_addrs.v6.source,
+            &global_address->addrs.v6.source, sizeof(struct in6_addr)) == 0
+        && memcmp(&entry->global_addrs.v6.group,
+            &global_address->addrs.v6.group, sizeof(struct in6_addr)) == 0) {
       return entry;
     }
   }
@@ -1205,86 +1240,76 @@ MCRX_EXPORT struct mcrx_mnat_entry* mcrx_mnat_ctx_find_entry(
 }
 
 /**
- * mcrx_mnat_ctx_add_entry:
+ * mcrx_mnat_ctx_add_or_update_mapping:
  *
  * Note: unresolved local source and local group needed to be populated as 0.0.0.0
  * Add the mcrx mnat entry.
  *
  **/
-MCRX_EXPORT enum mcrx_error_code mcrx_mnat_ctx_add_entry(
-    struct mcrx_mnat_ctx *mnatctx, const char *global_source,
-    const char *global_group, const char *local_source, const char *local_group) {
-  if (global_source == NULL || global_group == NULL || local_source == NULL
-      || local_group == NULL) {
+enum mcrx_error_code mcrx_mnat_ctx_add_or_update_mapping(
+    struct mcrx_mnatmap *mnatmap, const struct mcrx_subscription_config *global_address,
+    const struct mcrx_subscription_config *local_address) {
+  bool add_entry = false;
+  if (global_address == NULL || local_address == NULL) {
     return MCRX_ERR_NULLARG;
   }
-
-  struct mcrx_mnat_entry *entry = mcrx_mnat_ctx_find_entry(mnatctx,
-      global_source, global_group);
-  if (entry != NULL) {
-    return MCRX_ERR_ALREADY_EXISTED;
-  }
-  entry = calloc(1, sizeof(struct mcrx_mnat_entry));
-  if (!entry) {
-    return MCRX_ERR_NOMEM;
-  }
-  int ret;
-  ret = inet_pton(AF_INET, global_source, &entry->global_addrs.v4.source);
-  if (ret > 0) {
-    ret = inet_pton(AF_INET, global_group, &entry->global_addrs.v4.group);
-    if (ret > 0) {
-      ret = inet_pton(AF_INET, local_source, &entry->local_addrs.v4.source);
-      if (ret > 0) {
-        ret = inet_pton(AF_INET, local_group, &entry->local_addrs.v4.group);
-        if (ret > 0) {
-          entry->addr_type = MCRX_ADDR_TYPE_V4;
-        }
-      }
+  struct mcrx_mnat_entry *entry = mcrx_mnat_ctx_find_entry(mnatmap,
+      global_address);
+  if (entry == NULL) {
+    entry = calloc(1, sizeof(struct mcrx_mnat_entry));
+    if (!entry) {
+      return MCRX_ERR_NOMEM;
     }
+    add_entry = true;
   }
-
-  ret = inet_pton(AF_INET, global_source, &entry->global_addrs.v6.source);
-  if (ret > 0) {
-    ret = inet_pton(AF_INET, global_group, &entry->global_addrs.v6.group);
-    if (ret > 0) {
-      ret = inet_pton(AF_INET, local_source, &entry->local_addrs.v6.source);
-      if (ret > 0) {
-        ret = inet_pton(AF_INET, local_group, &entry->local_addrs.v6.group);
-        if (ret > 0) {
-          entry->addr_type = MCRX_ADDR_TYPE_V6;
-        }
-      }
+  if (global_address->addr_type == MCRX_ADDR_TYPE_V4 && local_address->addr_type == MCRX_ADDR_TYPE_V4) {
+      entry->addr_type = global_address->addr_type;
+      memcpy(&entry->global_addrs.v4.source, &global_address->addrs.v4.source, sizeof(struct in_addr));
+      memcpy(&entry->global_addrs.v4.group, &global_address->addrs.v4.group, sizeof(struct in_addr));
+      memcpy(&entry->local_addrs.v4.source, &local_address->addrs.v4.source, sizeof(struct in_addr));
+      memcpy(&entry->local_addrs.v4.group, &local_address->addrs.v4.group, sizeof(struct in_addr));
+  }
+  else if (global_address->addr_type == MCRX_ADDR_TYPE_V6
+      && local_address->addr_type == MCRX_ADDR_TYPE_V6) {
+    entry->addr_type = global_address->addr_type;
+    memcpy(&entry->global_addrs.v6.source, &global_address->addrs.v6.source,
+        sizeof(struct in6_addr));
+    memcpy(&entry->global_addrs.v6.group, &global_address->addrs.v6.group,
+        sizeof(struct in6_addr));
+    memcpy(&entry->local_addrs.v6.source, &local_address->addrs.v6.source,
+        sizeof(struct in6_addr));
+    memcpy(&entry->local_addrs.v6.group, &local_address->addrs.v6.group,
+        sizeof(struct in6_addr));
+  } else {
+    if (add_entry) {
+      free(entry);
     }
-  }
-
-  if (entry->addr_type != MCRX_ADDR_TYPE_V4
-      && entry->addr_type != MCRX_ADDR_TYPE_V6) {
-    free(entry);
     return MCRX_ERR_UNKNOWN_FAMILY;
   }
 
-  LIST_INSERT_HEAD(&mnatctx->mnats_head, entry, mnat_entries);
+  if (add_entry) {
+    LIST_INSERT_HEAD(&mnatmap->mnats_head, entry, mnat_entries);
+  }
 
   return MCRX_ERR_OK;
 }
 
 /**
- * mcrx_mnat_ctx_remove_entry:
+ * mcrx_mnat_ctx_remove_mapping:
  *
- * Remove the mcrx mnat entry.
+ * Remove the mcrx mnat mapping.
  *
  **/
-MCRX_EXPORT enum mcrx_error_code mcrx_mnat_ctx_remove_entry(
-    struct mcrx_mnat_ctx *mnatctx, const char *global_source,
-    const char *global_group) {
-  if (global_source == NULL || global_group == NULL) {
+MCRX_EXPORT enum mcrx_error_code mcrx_mnat_ctx_remove_mapping(
+    struct mcrx_mnatmap *mnatmap, const struct mcrx_subscription_config *global_address) {
+  if (global_address == NULL) {
     return MCRX_ERR_NULLARG;
   }
 
-  struct mcrx_mnat_entry *entry = mcrx_mnat_ctx_find_entry(mnatctx,
-      global_source, global_group);
+  struct mcrx_mnat_entry *entry = mcrx_mnat_ctx_find_entry(mnatmap,
+      global_address);
   if (entry == NULL) {
-    return MCRX_ERR_NOT_EXISTED;
+    return MCRX_ERR_OK;
   }
 
   LIST_REMOVE(entry, mnat_entries);
@@ -1294,81 +1319,29 @@ MCRX_EXPORT enum mcrx_error_code mcrx_mnat_ctx_remove_entry(
 }
 
 /**
- * mcrx_mnat_ctx_update_entry:
- *
- * Update the mcrx mnat entry.
- *
- **/
-MCRX_EXPORT enum mcrx_error_code mcrx_mnat_ctx_update_entry(
-    struct mcrx_mnat_ctx *mnatctx, const char *global_source,
-    const char *global_group, const char *local_source, const char *local_group) {
-  if (global_source == NULL || global_group == NULL || local_source == NULL
-      || local_group == NULL) {
-    return MCRX_ERR_NULLARG;
-  }
-
-  struct mcrx_mnat_entry *entry = mcrx_mnat_ctx_find_entry(mnatctx,
-      global_source, global_group);
-  if (entry == NULL) {
-    return MCRX_ERR_NOT_EXISTED;
-  }
-
-  int ret;
-  ret = inet_pton(AF_INET, global_source, &entry->global_addrs.v4.source);
-  if (ret > 0) {
-    ret = inet_pton(AF_INET, global_group, &entry->global_addrs.v4.group);
-    if (ret > 0) {
-      ret = inet_pton(AF_INET, local_source, &entry->local_addrs.v4.source);
-      if (ret > 0) {
-        ret = inet_pton(AF_INET, local_group, &entry->local_addrs.v4.group);
-        if (ret > 0) {
-          entry->addr_type = MCRX_ADDR_TYPE_V4;
-        }
-      }
-    }
-  }
-
-  ret = inet_pton(AF_INET, global_source, &entry->global_addrs.v6.source);
-  if (ret > 0) {
-    ret = inet_pton(AF_INET, global_group, &entry->global_addrs.v6.group);
-    if (ret > 0) {
-      ret = inet_pton(AF_INET, local_source, &entry->local_addrs.v6.source);
-      if (ret > 0) {
-        ret = inet_pton(AF_INET, local_group, &entry->local_addrs.v6.group);
-        if (ret > 0) {
-          entry->addr_type = MCRX_ADDR_TYPE_V6;
-        }
-      }
-    }
-  }
-
-  return MCRX_ERR_OK;
-}
-
-/**
  * mcrx_mnat_ctx_ref:
  *
  **/
-MCRX_EXPORT struct mcrx_mnat_ctx* mcrx_mnat_ctx_ref(
-    struct mcrx_mnat_ctx *mnatctx) {
-  mnatctx->refcount++;
-  return mnatctx;
+MCRX_EXPORT struct mcrx_mnatmap* mcrx_mnat_ctx_ref(
+    struct mcrx_mnatmap *mnatmap) {
+  mnatmap->refcount++;
+  return mnatmap;
 }
 
-MCRX_EXPORT struct mcrx_mnat_ctx* mcrx_mnat_ctx_unref(
-    struct mcrx_mnat_ctx *mnatctx) {
-  mnatctx->refcount--;
-  if (mnatctx->refcount > 0) {
-    return mnatctx;
+MCRX_EXPORT struct mcrx_mnatmap* mcrx_mnat_ctx_unref(
+    struct mcrx_mnatmap *mnatmap) {
+  mnatmap->refcount--;
+  if (mnatmap->refcount > 0) {
+    return mnatmap;
   }
 
-  while (!LIST_EMPTY(&mnatctx->mnats_head)) {
-    struct mcrx_mnat_entry *entry = LIST_FIRST(&mnatctx->mnats_head);
+  while (!LIST_EMPTY(&mnatmap->mnats_head)) {
+    struct mcrx_mnat_entry *entry = LIST_FIRST(&mnatmap->mnats_head);
     LIST_REMOVE(entry, mnat_entries);
     free(entry);
   }
 
-  free(mnatctx);
+  free(mnatmap);
   return NULL;
 }
 
@@ -1378,67 +1351,41 @@ MCRX_EXPORT struct mcrx_mnat_ctx* mcrx_mnat_ctx_unref(
  * Retrieve the mcrx mnat entry based on subscription.
  *
  **/
-MCRX_EXPORT struct mcrx_mnat_entry* mcrx_mnat_ctx_find_entry_from_subscription(
-    struct mcrx_subscription *sub, struct mcrx_mnat_ctx *mnatctx) {
-  if (sub == NULL || mnatctx == NULL) {
-    return NULL;
-  }
-  int af;
-  const void *src, *grp;
-  char src_buf[INET6_ADDRSTRLEN];
-  char grp_buf[INET6_ADDRSTRLEN];
-  switch (sub->input.addr_type) {
-  case MCRX_ADDR_TYPE_V4:
-    af = AF_INET;
-    src = &sub->input.addrs.v4.source;
-    grp = &sub->input.addrs.v4.group;
-    break;
-  case MCRX_ADDR_TYPE_V6:
-    af = AF_INET6;
-    src = &sub->input.addrs.v6.source;
-    grp = &sub->input.addrs.v6.group;
-    break;
-  default:
-    return NULL;
-  }
-  const char *src_str = inet_ntop(af, src, src_buf, sizeof(src_buf));
-  if (src_str == NULL) {
-    return NULL;
-  }
-  const char *grp_str = inet_ntop(af, grp, grp_buf, sizeof(grp_buf));
-  if (grp_str == NULL) {
+struct mcrx_mnat_entry* mcrx_mnat_ctx_find_entry_from_subscription(
+    struct mcrx_subscription *sub, struct mcrx_mnatmap *mnatmap) {
+  if (sub == NULL || mnatmap == NULL) {
     return NULL;
   }
 
-  return mcrx_mnat_ctx_find_entry(mnatctx, src_str, grp_str);
+  return mcrx_mnat_ctx_find_entry(mnatmap, &sub->input);
 }
 
 
-MCRX_EXPORT enum mcrx_error_code mcrx_mnat_ctx_clone(struct mcrx_mnat_ctx *mnatctx_src,
-    struct mcrx_mnat_ctx **mnatctxp_dest) {
-  if (mnatctx_src == NULL || mnatctxp_dest == NULL) {
+MCRX_EXPORT enum mcrx_error_code mcrx_mnat_ctx_clone(struct mcrx_mnatmap *mnatmap_src,
+    struct mcrx_mnatmap **mnatmapp_dest) {
+  if (mnatmap_src == NULL || mnatmapp_dest == NULL) {
     return MCRX_ERR_NULLARG;
   }
-  enum mcrx_error_code ret = mcrx_mnat_ctx_new(mnatctxp_dest);
+  enum mcrx_error_code ret = mcrx_mnat_ctx_new(mnatmapp_dest);
   if (ret != MCRX_ERR_OK) {
     return ret;
   }
   struct mcrx_mnat_entry *entry = NULL;
-  LIST_FOREACH(entry, &mnatctx_src->mnats_head, mnat_entries) {
+  LIST_FOREACH(entry, &mnatmap_src->mnats_head, mnat_entries) {
     struct mcrx_mnat_entry *entry_dest = calloc(1, sizeof(struct mcrx_mnat_entry));
     if (!entry_dest) {
-      mcrx_mnat_ctx_unref(*mnatctxp_dest);
-      *mnatctxp_dest = NULL;
+      mcrx_mnat_ctx_unref(*mnatmapp_dest);
+      *mnatmapp_dest = NULL;
       return MCRX_ERR_NOMEM;
     }
     memcpy((void *)entry_dest, (void *)entry, sizeof(entry));
-    LIST_INSERT_HEAD(&(*mnatctxp_dest)->mnats_head, entry_dest, mnat_entries);
+    LIST_INSERT_HEAD(&(*mnatmapp_dest)->mnats_head, entry_dest, mnat_entries);
   }
 
   return MCRX_ERR_OK;
 }
 
-MCRX_EXPORT bool mcrx_mnat_ctx_entry_unresolved(struct mcrx_mnat_entry* entry) {
+bool mcrx_mnat_ctx_entry_unresolved(struct mcrx_mnat_entry* entry) {
   if (entry == NULL) {
     return true;
   }
@@ -1455,7 +1402,7 @@ MCRX_EXPORT bool mcrx_mnat_ctx_entry_unresolved(struct mcrx_mnat_entry* entry) {
   return false;
 }
 
-MCRX_EXPORT bool mcrx_mnat_ctx_entry_local_equal(struct mcrx_mnat_entry* entry_src,
+bool mcrx_mnat_ctx_entry_local_equal(struct mcrx_mnat_entry* entry_src,
     struct mcrx_mnat_entry* entry_dest) {
   if (entry_src == NULL || entry_dest == NULL) {
     return false;
@@ -1473,7 +1420,7 @@ MCRX_EXPORT bool mcrx_mnat_ctx_entry_local_equal(struct mcrx_mnat_entry* entry_s
   return false;
 }
 
-MCRX_EXPORT bool mcrx_mnat_ctx_entry_global_equal(struct mcrx_mnat_entry* entry_src,
+bool mcrx_mnat_ctx_entry_global_equal(struct mcrx_mnat_entry* entry_src,
     struct mcrx_mnat_entry* entry_dest) {
   if (entry_src == NULL || entry_dest == NULL) {
     return false;
