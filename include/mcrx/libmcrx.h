@@ -49,7 +49,7 @@ struct mcrx_ctx;
 struct mcrx_subscription;
 
 /**
- * mcrx_mnat_ctx:
+ * mcrx_mnatmap:
  *
  * mnat context handle.
  */
@@ -232,19 +232,19 @@ enum mcrx_error_code mcrx_subscription_new(
     struct mcrx_subscription** subp);
 
 
-enum mcrx_error_code mcrx_mnat_ctx_new(struct mcrx_mnatmap **mnatmapp);
-struct mcrx_mnatmap* mcrx_mnat_ctx_ref(struct mcrx_mnatmap *mnatmap);
-struct mcrx_mnatmap* mcrx_mnat_ctx_unref(struct mcrx_mnatmap *mnatmap);
-enum mcrx_error_code mcrx_mnat_ctx_add_or_update_mapping(
+enum mcrx_error_code mcrx_mnatmap_new(struct mcrx_mnatmap **mnatmapp);
+struct mcrx_mnatmap* mcrx_mnatmap_ref(struct mcrx_mnatmap *mnatmap);
+struct mcrx_mnatmap* mcrx_mnatmap_unref(struct mcrx_mnatmap *mnatmap);
+enum mcrx_error_code mcrx_mnatmap_add_or_update_mapping(
     struct mcrx_mnatmap *mnatmap,
     const struct mcrx_subscription_config *global_address,
     const struct mcrx_subscription_config *local_address);
-enum mcrx_error_code mcrx_mnat_ctx_remove_mapping(struct mcrx_mnatmap *mnatmap,
+enum mcrx_error_code mcrx_mnatmap_remove_mapping(struct mcrx_mnatmap *mnatmap,
     const struct mcrx_subscription_config *global_address);
-enum mcrx_error_code mcrx_mnat_ctx_get_mapping(struct mcrx_mnatmap *mnatmap,
+enum mcrx_error_code mcrx_mnatmap_get_mapping(struct mcrx_mnatmap *mnatmap,
     const struct mcrx_subscription_config *global_address,
     struct mcrx_subscription_config *local_address);
-enum mcrx_error_code mcrx_mnat_ctx_apply(struct mcrx_ctx *ctx,
+enum mcrx_error_code mcrx_mnatmap_apply(struct mcrx_ctx *ctx,
     struct mcrx_mnatmap *mnatmapp);
 
 /*

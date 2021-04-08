@@ -241,15 +241,15 @@ void wrap_strerr(
     char* buf,
     int len);
 
-struct mcrx_mnat_entry* mcrx_mnat_ctx_find_entry(struct mcrx_mnatmap *mnatmap,
+struct mcrx_mnat_entry* mcrx_mnatmap_find_entry(struct mcrx_mnatmap *mnatmap,
     const struct mcrx_subscription_config *global_address);
-struct mcrx_mnat_entry* mcrx_mnat_ctx_find_entry_from_subscription(
+struct mcrx_mnat_entry* mcrx_mnatmap_find_entry_from_subscription(
     struct mcrx_subscription *sub, struct mcrx_mnatmap *mnatmap);
-enum mcrx_error_code mcrx_mnat_ctx_clone(struct mcrx_mnatmap *mnatmap_src,
+enum mcrx_error_code mcrx_mnatmap_clone(struct mcrx_mnatmap *mnatmap_src,
     struct mcrx_mnatmap **mnatmapp_dest);
-bool mcrx_mnat_ctx_entry_unresolved(struct mcrx_mnat_entry* entry);
-bool mcrx_mnat_ctx_entry_local_equal(struct mcrx_mnat_entry* entry_src, struct mcrx_mnat_entry* entry_dest);
-bool mcrx_mnat_ctx_entry_global_equal(struct mcrx_mnat_entry* entry_src, struct mcrx_mnat_entry* entry_dest);
+bool mcrx_mnatmap_entry_unresolved(struct mcrx_mnat_entry* entry);
+bool mcrx_mnatmap_entry_local_equal(struct mcrx_mnat_entry* entry_src, struct mcrx_mnat_entry* entry_dest);
+bool mcrx_mnatmap_entry_global_equal(struct mcrx_mnat_entry* entry_src, struct mcrx_mnat_entry* entry_dest);
 
 enum mcrx_error_code handle_close_error_impl(
     struct mcrx_ctx* ctx,

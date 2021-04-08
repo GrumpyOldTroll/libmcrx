@@ -63,7 +63,7 @@ main(int argc, char *argv[])
 
   struct mcrx_ctx *ctx;
   struct mcrx_subscription *sub = NULL;
-  struct mcrx_mnat_ctx *mnat_ctx;
+  struct mcrx_mnatmap *mnatmap;
   int err;
   struct sub_info info = { .npackets=0 };
 
@@ -73,18 +73,22 @@ main(int argc, char *argv[])
     return EXIT_FAILURE;
   }
 
-  err = mcrx_mnat_ctx_new(&mnat_ctx);
+  err = mcrx_mnatmap_new(&mnatmap);
   if (err != 0) {
-    fprintf(stderr, "mcrx_ctx_mnat_new failed\n");
+    fprintf(stderr, "mcrx_mnatmap_new failed\n");
     return EXIT_FAILURE;
   }
-  err = mcrx_mnat_ctx_add_entry(mnat_ctx, "23.212.185.5", "232.1.1.1", "10.10.10.10", "11.11.11.11");
+  struct mcrx_subscription_config cfg_global = MCRX_SUBSCRIPTION_CONFIG_INIT;
+  mcrx_subscription_config_pton(&cfg_global, "23.212.185.5", "232.1.1.1");
+  struct mcrx_subscription_config cfg_local = MCRX_SUBSCRIPTION_CONFIG_INIT;
+  mcrx_subscription_config_pton(&cfg_local, "10.10.10.10", "11.11.11.11");
+  err = mcrx_mnatmap_add_or_update_mapping(mnatmap, &cfg_global, &cfg_local);
   if (err != 0) {
-    fprintf(stderr, "mcrx_mnat_ctx_add_entry failed\n");
+    fprintf(stderr, "mcrx_mnatmapadd_entry failed\n");
     return EXIT_FAILURE;
   }
   mcrx_ctx_set_log_priority(ctx, MCRX_LOGLEVEL_DEBUG);
-  mcrx_mnat_ctx_apply(ctx, mnat_ctx);
+  mcrx_mnatmap_apply(ctx, mnatmap);
 
   struct mcrx_subscription_config cfg = MCRX_SUBSCRIPTION_CONFIG_INIT;
   err = mcrx_subscription_config_pton(&cfg, "23.212.185.5", "232.1.1.1");
