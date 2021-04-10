@@ -102,4 +102,3 @@ test_test_rejoin_same_LDADD = libmcrx.a
 
 test_test_logstr_SOURCES = test/test-logstr.c
 test_test_logstr_LDADD = libmcrx.a
-

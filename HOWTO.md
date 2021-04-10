@@ -199,4 +199,3 @@ So in this example, it's important to ensure that the macvlan's name is lexicall
 
 Note that for a VM, forwarding traffic into the LAN doesn't have to mean onto a wire, it can be forwarded into a host-only adapter from a guest to send traffic to the host machine or another guest machine sharing the host-only network.
 This can be a useful way to work with multicast in a development environment.
-

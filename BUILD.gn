@@ -28,4 +28,3 @@ static_library("mcrx") {
     "//build/config/compiler:no_chromium_code",
   ]
 }
-
