@@ -231,19 +231,35 @@ enum mcrx_error_code mcrx_subscription_new(
     const struct mcrx_subscription_config* config,
     struct mcrx_subscription** subp);
 
+/**
+ * mcrx_source_group_addrs:
+ *
+ * source and group address pair
+ */
+struct mcrx_source_group_addrs {
+  enum MCRX_ADDR_TYPE addr_type;
+  union {
+    struct mcrx_subscription_addrs_v4 v4;
+    struct mcrx_subscription_addrs_v6 v6;
+  } addrs;
+};
 
+enum mcrx_error_code mcrx_source_group_addrs_config_pton(
+    struct mcrx_source_group_addrs *addrs,
+    const char* source,
+    const char* group);
 enum mcrx_error_code mcrx_mnatmap_new(struct mcrx_mnatmap **mnatmapp);
 struct mcrx_mnatmap* mcrx_mnatmap_ref(struct mcrx_mnatmap *mnatmap);
 struct mcrx_mnatmap* mcrx_mnatmap_unref(struct mcrx_mnatmap *mnatmap);
 enum mcrx_error_code mcrx_mnatmap_add_or_update_mapping(
     struct mcrx_mnatmap *mnatmap,
-    const struct mcrx_subscription_config *global_address,
-    const struct mcrx_subscription_config *local_address);
+    const struct mcrx_source_group_addrs *global_address,
+    const struct mcrx_source_group_addrs *local_address);
 enum mcrx_error_code mcrx_mnatmap_remove_mapping(struct mcrx_mnatmap *mnatmap,
-    const struct mcrx_subscription_config *global_address);
+    const struct mcrx_source_group_addrs *global_address);
 enum mcrx_error_code mcrx_mnatmap_get_mapping(struct mcrx_mnatmap *mnatmap,
-    const struct mcrx_subscription_config *global_address,
-    struct mcrx_subscription_config *local_address);
+    const struct mcrx_source_group_addrs *global_address,
+    struct mcrx_source_group_addrs *local_address);
 enum mcrx_error_code mcrx_mnatmap_apply(struct mcrx_ctx *ctx,
     struct mcrx_mnatmap *mnatmapp);
 

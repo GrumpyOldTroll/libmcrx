@@ -78,11 +78,11 @@ main(int argc, char *argv[])
     fprintf(stderr, "mcrx_mnatmap_new failed\n");
     return EXIT_FAILURE;
   }
-  struct mcrx_subscription_config cfg_global = MCRX_SUBSCRIPTION_CONFIG_INIT;
-  mcrx_subscription_config_pton(&cfg_global, "23.212.185.5", "232.1.1.1");
-  struct mcrx_subscription_config cfg_local = MCRX_SUBSCRIPTION_CONFIG_INIT;
-  mcrx_subscription_config_pton(&cfg_local, "10.10.10.10", "11.11.11.11");
-  err = mcrx_mnatmap_add_or_update_mapping(mnatmap, &cfg_global, &cfg_local);
+  struct mcrx_source_group_addrs global_addr;
+  mcrx_source_group_addrs_config_pton(&global_addr, "23.212.185.5", "232.11.11.11");
+  struct mcrx_source_group_addrs local_addr;
+  mcrx_source_group_addrs_config_pton(&local_addr, "10.10.10.10", "11.11.11.11");
+  err = mcrx_mnatmap_add_or_update_mapping(mnatmap, &global_addr, &local_addr);
   if (err != 0) {
     fprintf(stderr, "mcrx_mnatmapadd_entry failed\n");
     return EXIT_FAILURE;

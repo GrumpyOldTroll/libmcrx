@@ -479,7 +479,7 @@ static enum mcrx_error_code mcrx_find_interface(
       if (sub->mnat_entry == NULL) {
         sp4->sin_addr = sub->input.addrs.v4.source;
       } else {
-        sp4->sin_addr = sub->mnat_entry->local_addrs.v4.source;
+        sp4->sin_addr = sub->mnat_entry->local_addrs.addrs.v4.source;
       }
       // NB: no packets are generated or received on this socket, so the
       // port doesn't ever appear on the network.  But it still must be
@@ -499,7 +499,7 @@ static enum mcrx_error_code mcrx_find_interface(
       if (sub->mnat_entry == NULL) {
         sp6->sin6_addr = sub->input.addrs.v6.source;
       } else {
-        sp6->sin6_addr = sub->mnat_entry->local_addrs.v6.source;
+        sp6->sin6_addr = sub->mnat_entry->local_addrs.addrs.v6.source;
       }
       // NB: no packets are generated or received on this socket, so the
       // port doesn't ever appear on the network.  But it still must be
@@ -1010,14 +1010,14 @@ enum mcrx_error_code mcrx_subscription_native_join(
       if (sub->mnat_entry == NULL) {
         sin4_group.sin_addr = sub->input.addrs.v4.group;
       } else {
-        sin4_group.sin_addr = sub->mnat_entry->local_addrs.v4.group;
+        sin4_group.sin_addr = sub->mnat_entry->local_addrs.addrs.v4.group;
       }
 
       sin4_source->sin_family = AF_INET;
       if (sub->mnat_entry == NULL) {
         sin4_source->sin_addr = sub->input.addrs.v4.source;
       } else {
-        sin4_source->sin_addr = sub->mnat_entry->local_addrs.v4.source;
+        sin4_source->sin_addr = sub->mnat_entry->local_addrs.addrs.v4.source;
       }
 #if BSD
       sin4_group.sin_len = sizeof(struct sockaddr_in);
@@ -1112,14 +1112,14 @@ enum mcrx_error_code mcrx_subscription_native_join(
       if (sub->mnat_entry == NULL) {
         sin6_group.sin6_addr = sub->input.addrs.v6.group;
       } else {
-        sin6_group.sin6_addr = sub->mnat_entry->local_addrs.v6.group;
+        sin6_group.sin6_addr = sub->mnat_entry->local_addrs.addrs.v6.group;
       }
 
       sin6_source->sin6_family = AF_INET6;
       if (sub->mnat_entry == NULL) {
         sin6_source->sin6_addr = sub->input.addrs.v6.source;
       } else {
-        sin6_source->sin6_addr = sub->mnat_entry->local_addrs.v6.source;
+        sin6_source->sin6_addr = sub->mnat_entry->local_addrs.addrs.v6.source;
       }
 #if BSD
       sin6_group.sin6_len = sizeof(struct sockaddr_in6);

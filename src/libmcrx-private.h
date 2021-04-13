@@ -150,15 +150,8 @@ enum mcrx_socket_handling_state {
  */
 struct mcrx_mnat_entry {
   LIST_ENTRY(mcrx_mnat_entry) mnat_entries;
-  enum MCRX_ADDR_TYPE addr_type;
-  union {
-      struct mcrx_subscription_addrs_v4 v4;
-      struct mcrx_subscription_addrs_v6 v6;
-  } local_addrs;
-  union {
-      struct mcrx_subscription_addrs_v4 v4;
-      struct mcrx_subscription_addrs_v6 v6;
-  } global_addrs;
+  struct mcrx_source_group_addrs local_addrs;
+  struct mcrx_source_group_addrs global_addrs;
 };
 
 /**
@@ -242,8 +235,8 @@ void wrap_strerr(
     int len);
 
 struct mcrx_mnat_entry* mcrx_mnatmap_find_entry(struct mcrx_mnatmap *mnatmap,
-    const struct mcrx_subscription_config *global_address);
-struct mcrx_mnat_entry* mcrx_mnatmap_find_entry_from_subscription(
+    const struct mcrx_source_group_addrs *global_address);
+struct mcrx_mnat_entry* mcrx_mnatmap_find_or_alloc_entry_from_subscription(
     struct mcrx_subscription *sub, struct mcrx_mnatmap *mnatmap);
 enum mcrx_error_code mcrx_mnatmap_clone(struct mcrx_mnatmap *mnatmap_src,
     struct mcrx_mnatmap **mnatmapp_dest);
