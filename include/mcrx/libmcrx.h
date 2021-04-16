@@ -145,6 +145,13 @@ enum mcrx_error_code mcrx_ctx_set_receive_socket_handlers(
         struct mcrx_ctx* ctx,
         int fd));
 
+enum mcrx_subscription_state {
+  MCRX_SUBSCRIPTION_STATE_UNJOINED,
+  MCRX_SUBSCRIPTION_STATE_PENDING, // pending mnat resolution
+  MCRX_SUBSCRIPTION_STATE_JOINED,
+  MCRX_SUBSCRIPTION_STATE_JOINED_FAILED,
+  MCRX_SUBSCRIPTION_STATE_UNJOINED_FAILED,
+};
 
 /**
  * mcrx_subscription_addrs_v4:
@@ -261,7 +268,7 @@ enum mcrx_error_code mcrx_mnatmap_get_mapping(struct mcrx_mnatmap *mnatmap,
     const struct mcrx_source_group_addrs *global_address,
     struct mcrx_source_group_addrs *local_address);
 enum mcrx_error_code mcrx_mnatmap_apply(struct mcrx_ctx *ctx,
-    struct mcrx_mnatmap *mnatmapp);
+    struct mcrx_mnatmap *mnatmap);
 
 /*
  * at entry to receive_cb, mcrx_packet_get_userdata returns the
@@ -276,6 +283,10 @@ void mcrx_subscription_set_receive_cb(
     struct mcrx_subscription* sub,
     int (*receive_cb)(
       struct mcrx_packet* packet));
+void mcrx_subscription_set_state_change_cb(
+    struct mcrx_subscription* sub,
+    int (*state_change_cb)(
+        enum mcrx_subscription_state state, enum mcrx_error_code result));
 
 void mcrx_subscription_set_max_payload(
     struct mcrx_subscription* sub,
