@@ -786,7 +786,7 @@ MCRX_EXPORT void mcrx_subscription_set_receive_cb(
 MCRX_EXPORT void mcrx_subscription_set_state_change_cb(
     struct mcrx_subscription* sub,
     int (*state_change_cb)(
-        enum mcrx_subscription_state state, enum mcrx_error_code result)) {
+        struct mcrx_subscription* sub, enum mcrx_subscription_state state, enum mcrx_error_code result)) {
   sub->state_change_cb = state_change_cb;
 }
 
@@ -808,9 +808,9 @@ MCRX_EXPORT enum mcrx_error_code mcrx_subscription_join(
       info(sub->ctx, "can not find resolved mnat entry for subscription %p\n", (void *)sub);
       sub->state = MCRX_SUBSCRIPTION_STATE_PENDING;
       if (sub->state_change_cb) {
-        sub->state_change_cb(sub->state, MCRX_ERR_OK);
+        sub->state_change_cb(sub, sub->state, MCRX_ERR_OK);
       }
-      return MCRX_ERR_UNSUPPORTED;
+      return MCRX_ERR_OK;
     }
   }
   enum mcrx_error_code err = mcrx_subscription_native_join(sub);
@@ -821,12 +821,12 @@ MCRX_EXPORT enum mcrx_error_code mcrx_subscription_join(
     }
     sub->state = MCRX_SUBSCRIPTION_STATE_JOINED;
     if (sub->state_change_cb) {
-      sub->state_change_cb(sub->state, MCRX_ERR_OK);
+      sub->state_change_cb(sub, sub->state, MCRX_ERR_OK);
     }
   } else {
-    sub->state = MCRX_SUBSCRIPTION_STATE_JOINED_FAILED;
+    sub->state = MCRX_SUBSCRIPTION_STATE_UNJOINED;
     if (sub->state_change_cb) {
-      sub->state_change_cb(sub->state, err);
+      sub->state_change_cb(sub, sub->state, err);
     }
   }
   return err;
@@ -842,8 +842,16 @@ MCRX_EXPORT enum mcrx_error_code mcrx_subscription_join(
  **/
 MCRX_EXPORT enum mcrx_error_code mcrx_subscription_leave(
     struct mcrx_subscription* sub) {
-  if (sub->state != MCRX_SUBSCRIPTION_STATE_JOINED) {
+  if (sub->state == MCRX_SUBSCRIPTION_STATE_UNJOINED) {
     return MCRX_ERR_ALREADY_NOTJOINED;
+  }
+  if (sub->state == MCRX_SUBSCRIPTION_STATE_PENDING) {
+    sub->mnat_entry = NULL;
+    sub->state = MCRX_SUBSCRIPTION_STATE_UNJOINED;
+    if (sub->state_change_cb) {
+      sub->state_change_cb(sub, sub->state, MCRX_ERR_OK);
+    }
+    return MCRX_ERR_OK;
   }
   sub->mnat_entry = NULL;
   enum mcrx_error_code err = mcrx_subscription_native_leave(sub);
@@ -854,12 +862,12 @@ MCRX_EXPORT enum mcrx_error_code mcrx_subscription_leave(
     }
     sub->state = MCRX_SUBSCRIPTION_STATE_UNJOINED;
     if (sub->state_change_cb) {
-      sub->state_change_cb(sub->state, MCRX_ERR_OK);
+      sub->state_change_cb(sub, sub->state, MCRX_ERR_OK);
     }
   } else {
-    sub->state = MCRX_SUBSCRIPTION_STATE_UNJOINED_FAILED;
+    sub->state = MCRX_SUBSCRIPTION_STATE_UNJOINED;
     if (sub->state_change_cb) {
-      sub->state_change_cb(sub->state, err);
+      sub->state_change_cb(sub, sub->state, err);
     }
   }
   return err;
@@ -1152,28 +1160,49 @@ MCRX_EXPORT enum mcrx_error_code mcrx_mnatmap_apply(struct mcrx_ctx *ctx,
     if (ret != MCRX_ERR_OK) {
       return ret;
     }
-    // replace the run time mnat context
-    mcrx_mnatmap_unref(ctx->mnat_map);
+    struct mcrx_mnatmap *original_mnat_map = ctx->mnat_map;
     ctx->mnat_map = clone_context;
     struct mcrx_subscription *sub;
     LIST_FOREACH(sub, &ctx->subs_head, sub_entries) {
-      if (sub->joined) {
-        mcrx_subscription_leave(sub);
+      if (sub->state == MCRX_SUBSCRIPTION_STATE_PENDING) {
         mcrx_subscription_join(sub);
+      } else if (sub->state == MCRX_SUBSCRIPTION_STATE_JOINED && original_mnat_map == NULL) {
+        // previous subscription joined without MNAT
+        mcrx_subscription_join(sub);
+      } else if (sub->state == MCRX_SUBSCRIPTION_STATE_JOINED) {
+        struct mcrx_mnat_entry *entry = NULL;
+        struct mcrx_source_group_addrs global_address;
+        memset(&global_address, 0, sizeof(global_address));
+        global_address.addr_type = sub->input.addr_type;
+        memcpy(&global_address.addrs, &sub->input.addrs,
+            sizeof(global_address.addrs));
+        entry = mcrx_mnatmap_find_entry(ctx->mnat_map, &global_address);
+        if (!mcrx_mnatmap_entry_local_equal(entry, sub->mnat_entry)) {
+          mcrx_subscription_leave(sub);
+          mcrx_subscription_join(sub);
+        }
       } else {
-        mcrx_subscription_join(sub);
+        sub->mnat_entry = NULL;
       }
+    }
+    if (original_mnat_map != NULL) {
+      mcrx_mnatmap_unref(original_mnat_map);
     }
   } else {
     if (ctx->mnat_map != NULL) {
+      struct mcrx_mnatmap *original_mnat_map = ctx->mnat_map;
+      ctx->mnat_map = NULL;
       struct mcrx_subscription *sub;
       LIST_FOREACH(sub, &ctx->subs_head, sub_entries)
       {
-        if (sub->joined) {
+        if (sub->state == MCRX_SUBSCRIPTION_STATE_JOINED) {
           mcrx_subscription_leave(sub);
+          mcrx_subscription_join(sub);
+        } else if (sub->state == MCRX_SUBSCRIPTION_STATE_PENDING) {
+          mcrx_subscription_join(sub);
         }
       }
-      ctx->mnat_map = mcrx_mnatmap_unref(ctx->mnat_map);
+      mcrx_mnatmap_unref(original_mnat_map);
     }
   }
 
@@ -1212,7 +1241,9 @@ MCRX_EXPORT enum mcrx_error_code mcrx_mnatmap_get_mapping(
     memset(local_address, 0, sizeof(struct mcrx_source_group_addrs));
     local_address->addr_type = entry->local_addrs.addr_type;
   } else {
-    return MNAT_ENTRY_NOT_FOUND;
+    memset(local_address, 0, sizeof(struct mcrx_source_group_addrs));
+    local_address->addr_type = entry->local_addrs.addr_type;
+    return MCRX_ERR_INTERNAL_ERROR;
   }
   return MCRX_ERR_OK;
 }
@@ -1288,7 +1319,7 @@ enum mcrx_error_code mcrx_mnatmap_add_or_update_mapping(
   }
   if (local_address == NULL || local_address->addr_type == MCRX_ADDR_TYPE_UNKNOWN) {
     // unresolved local address
-    memset(entry, 0, sizeof(struct mcrx_mnat_entry));
+    memset(&entry->local_addrs, 0, sizeof(entry->local_addrs));
     entry->local_addrs.addr_type = MCRX_ADDR_TYPE_UNKNOWN;
   } else if (local_address->addr_type == MCRX_ADDR_TYPE_V4) {
     entry->local_addrs.addr_type = local_address->addr_type;
@@ -1432,15 +1463,7 @@ bool mcrx_mnatmap_entry_unresolved(struct mcrx_mnat_entry* entry) {
   if (entry->local_addrs.addr_type == MCRX_ADDR_TYPE_UNKNOWN) {
     return true;
   }
-  if (entry->local_addrs.addr_type == MCRX_ADDR_TYPE_V4 && entry->local_addrs.addrs.v4.source.s_addr == INADDR_ANY) {
-    return true;
-  }
-  struct in6_addr any6 = IN6ADDR_ANY_INIT;
-  if (entry->local_addrs.addr_type == MCRX_ADDR_TYPE_V6
-      && memcmp((void*) &entry->local_addrs.addrs.v6.source, (void*) &any6,
-          sizeof(any6)) == 0) {
-    return true;
-  }
+
   return false;
 }
 

@@ -149,8 +149,6 @@ enum mcrx_subscription_state {
   MCRX_SUBSCRIPTION_STATE_UNJOINED,
   MCRX_SUBSCRIPTION_STATE_PENDING, // pending mnat resolution
   MCRX_SUBSCRIPTION_STATE_JOINED,
-  MCRX_SUBSCRIPTION_STATE_JOINED_FAILED,
-  MCRX_SUBSCRIPTION_STATE_UNJOINED_FAILED,
 };
 
 /**
@@ -286,7 +284,7 @@ void mcrx_subscription_set_receive_cb(
 void mcrx_subscription_set_state_change_cb(
     struct mcrx_subscription* sub,
     int (*state_change_cb)(
-        enum mcrx_subscription_state state, enum mcrx_error_code result));
+        struct mcrx_subscription* sub, enum mcrx_subscription_state state, enum mcrx_error_code result));
 
 void mcrx_subscription_set_max_payload(
     struct mcrx_subscription* sub,

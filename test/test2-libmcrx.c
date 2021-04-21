@@ -81,7 +81,7 @@ main(int argc, char *argv[])
   struct mcrx_source_group_addrs global_addr;
   mcrx_source_group_addrs_config_pton(&global_addr, "23.212.185.5", "232.11.11.11");
   struct mcrx_source_group_addrs local_addr;
-  mcrx_source_group_addrs_config_pton(&local_addr, "10.10.10.10", "11.11.11.11");
+  mcrx_source_group_addrs_config_pton(&local_addr, "10.10.10.10", "239.11.11.11");
   err = mcrx_mnatmap_add_or_update_mapping(mnatmap, &global_addr, &local_addr);
   if (err != 0) {
     fprintf(stderr, "mcrx_mnatmapadd_entry failed\n");

@@ -136,7 +136,7 @@ struct mcrx_subscription {
   const char* override_ifname;
   struct mcrx_mnat_entry *mnat_entry;
   enum mcrx_subscription_state state;
-  int (*state_change_cb)(enum mcrx_subscription_state state, enum mcrx_error_code result);
+  int (*state_change_cb)(struct mcrx_subscription *sub, enum mcrx_subscription_state state, enum mcrx_error_code result);
 };
 
 enum mcrx_socket_handling_state {
