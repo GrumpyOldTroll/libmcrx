@@ -1058,7 +1058,7 @@ mcrx_strerror(enum mcrx_error_code err) {
       return "mcrx: already not joined";
     case MCRX_ERR_INTERNAL_ERROR:
       return "mcrx: internal library error";
-    case MNAT_ENTRY_NOT_FOUND:
+    case MCRX_ERR_MNAT_ENTRY_NOT_FOUND:
       return "mcrx: mnat entry not found";
     case MCRX_ERR_CALLBACK_FAILED:
       return "mcrx: callback failed";
@@ -1178,8 +1178,14 @@ MCRX_EXPORT enum mcrx_error_code mcrx_mnatmap_apply(struct mcrx_ctx *ctx,
             sizeof(global_address.addrs));
         entry = mcrx_mnatmap_find_entry(ctx->mnat_map, &global_address);
         if (!mcrx_mnatmap_entry_local_equal(entry, sub->mnat_entry)) {
-          mcrx_subscription_leave(sub);
-          mcrx_subscription_join(sub);
+          if (sub->mnat_entry == NULL && entry != NULL && mcrx_mnatmap_address_equal(&entry->global_addrs, &entry->local_addrs)) {
+            sub->mnat_entry = entry;
+          } else {
+            mcrx_subscription_leave(sub);
+            mcrx_subscription_join(sub);
+          }
+        } else {
+          sub->mnat_entry = entry;
         }
       } else {
         sub->mnat_entry = NULL;
@@ -1225,7 +1231,7 @@ MCRX_EXPORT enum mcrx_error_code mcrx_mnatmap_get_mapping(
   }
   struct mcrx_mnat_entry *entry = mcrx_mnatmap_find_entry(mnatmap, global_address);
   if (entry == NULL) {
-    return MNAT_ENTRY_NOT_FOUND;
+    return MCRX_ERR_MNAT_ENTRY_NOT_FOUND;
   }
   if (entry->local_addrs.addr_type == MCRX_ADDR_TYPE_V4) {
     local_address->addr_type = entry->local_addrs.addr_type;
@@ -1472,20 +1478,7 @@ bool mcrx_mnatmap_entry_local_equal(struct mcrx_mnat_entry* entry_src,
   if (entry_src == NULL || entry_dest == NULL) {
     return false;
   }
-  if (entry_src->local_addrs.addr_type == MCRX_ADDR_TYPE_V4 && entry_dest->local_addrs.addr_type == MCRX_ADDR_TYPE_V4 &&
-      memcmp(&entry_src->local_addrs.addrs.v4.source, &entry_dest->local_addrs.addrs.v4.source, sizeof(struct in_addr)) == 0 &&
-      memcmp(&entry_src->local_addrs.addrs.v4.group, &entry_dest->local_addrs.addrs.v4.group, sizeof(struct in_addr)) == 0) {
-    return true;
-  }
-  if (entry_src->local_addrs.addr_type == MCRX_ADDR_TYPE_V6 && entry_dest->local_addrs.addr_type == MCRX_ADDR_TYPE_V6 &&
-      memcmp(&entry_src->local_addrs.addrs.v6.source, &entry_dest->local_addrs.addrs.v6.source, sizeof(struct in6_addr)) == 0 &&
-      memcmp(&entry_src->local_addrs.addrs.v6.group, &entry_dest->local_addrs.addrs.v6.group, sizeof(struct in6_addr)) == 0) {
-    return true;
-  }
-  if (entry_src->local_addrs.addr_type == MCRX_ADDR_TYPE_UNKNOWN && entry_dest->local_addrs.addr_type == MCRX_ADDR_TYPE_UNKNOWN) {
-    return true;
-  }
-  return false;
+  return mcrx_mnatmap_address_equal(&entry_src->local_addrs, &entry_dest->local_addrs);
 }
 
 bool mcrx_mnatmap_entry_global_equal(struct mcrx_mnat_entry* entry_src,
@@ -1493,18 +1486,27 @@ bool mcrx_mnatmap_entry_global_equal(struct mcrx_mnat_entry* entry_src,
   if (entry_src == NULL || entry_dest == NULL) {
     return false;
   }
-  if (entry_src->global_addrs.addr_type == MCRX_ADDR_TYPE_V4 && entry_dest->global_addrs.addr_type == MCRX_ADDR_TYPE_V4 &&
-      memcmp(&entry_src->global_addrs.addrs.v4.source, &entry_dest->global_addrs.addrs.v4.source, sizeof(struct in_addr)) == 0 &&
-      memcmp(&entry_src->global_addrs.addrs.v4.group, &entry_dest->global_addrs.addrs.v4.group, sizeof(struct in_addr)) == 0) {
+  return mcrx_mnatmap_address_equal(&entry_src->global_addrs, &entry_dest->global_addrs);
+}
+
+bool mcrx_mnatmap_address_equal(struct mcrx_source_group_addrs * addr1,
+    struct mcrx_source_group_addrs *addr2) {
+  if (addr1 == NULL || addr2 == NULL) {
+      return false;
+    }
+  if (addr1->addr_type == MCRX_ADDR_TYPE_V4 && addr2->addr_type == MCRX_ADDR_TYPE_V4 &&
+      memcmp(&addr1->addrs.v4.source, &addr2->addrs.v4.source, sizeof(struct in_addr)) == 0 &&
+      memcmp(&addr1->addrs.v4.group, &addr2->addrs.v4.group, sizeof(struct in_addr)) == 0) {
     return true;
   }
-  if (entry_src->global_addrs.addr_type == MCRX_ADDR_TYPE_V6 && entry_dest->global_addrs.addr_type == MCRX_ADDR_TYPE_V6 &&
-      memcmp(&entry_src->global_addrs.addrs.v6.source, &entry_dest->global_addrs.addrs.v6.source, sizeof(struct in6_addr)) == 0 &&
-      memcmp(&entry_src->global_addrs.addrs.v6.group, &entry_dest->global_addrs.addrs.v6.group, sizeof(struct in6_addr)) == 0) {
+  if (addr1->addr_type == MCRX_ADDR_TYPE_V6 && addr2->addr_type == MCRX_ADDR_TYPE_V6 &&
+      memcmp(&addr1->addrs.v6.source, &addr2->addrs.v6.source, sizeof(struct in6_addr)) == 0 &&
+      memcmp(&addr1->addrs.v6.group, &addr2->addrs.v6.group, sizeof(struct in6_addr)) == 0) {
     return true;
   }
   return false;
 }
+
 
 MCRX_EXPORT enum mcrx_error_code mcrx_source_group_addrs_config_pton(
     struct mcrx_source_group_addrs *addrs,

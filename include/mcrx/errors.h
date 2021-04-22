@@ -39,7 +39,7 @@ enum mcrx_error_code {
   MCRX_ERR_CALLBACK_FAILED,
   MCRX_ERR_NOTHING_JOINED,
   MCRX_ERR_INCONSISTENT_HANDLER,
-  MNAT_ENTRY_NOT_FOUND,
+  MCRX_ERR_MNAT_ENTRY_NOT_FOUND,
 
   // errors from system calls within the library.  errno
   // remains as set by the underlying system.

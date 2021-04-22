@@ -245,6 +245,7 @@ enum mcrx_error_code mcrx_mnatmap_clone(struct mcrx_mnatmap *mnatmap_src,
 bool mcrx_mnatmap_entry_unresolved(struct mcrx_mnat_entry* entry);
 bool mcrx_mnatmap_entry_local_equal(struct mcrx_mnat_entry* entry_src, struct mcrx_mnat_entry* entry_dest);
 bool mcrx_mnatmap_entry_global_equal(struct mcrx_mnat_entry* entry_src, struct mcrx_mnat_entry* entry_dest);
+bool mcrx_mnatmap_address_equal(struct mcrx_source_group_addrs * addr1, struct mcrx_source_group_addrs *addr2);
 
 enum mcrx_error_code handle_close_error_impl(
     struct mcrx_ctx* ctx,
