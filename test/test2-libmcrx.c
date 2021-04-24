@@ -91,7 +91,7 @@ main(int argc, char *argv[])
   mcrx_mnatmap_apply(ctx, mnatmap);
 
   struct mcrx_subscription_config cfg = MCRX_SUBSCRIPTION_CONFIG_INIT;
-  err = mcrx_subscription_config_pton(&cfg, "23.212.185.5", "232.1.1.1");
+  err = mcrx_subscription_config_pton(&cfg, "23.212.185.5", "232.11.11.11");
   if (err != 0) {
     fprintf(stderr, "subscription_config_pton failed\n");
     mcrx_ctx_unref(ctx);
