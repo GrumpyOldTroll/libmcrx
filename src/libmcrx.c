@@ -1454,7 +1454,7 @@ MCRX_EXPORT enum mcrx_error_code mcrx_mnatmap_clone(struct mcrx_mnatmap *mnatmap
       *mnatmapp_dest = NULL;
       return MCRX_ERR_NOMEM;
     }
-    memcpy((void *)entry_dest, (void *)entry, sizeof(entry));
+    memcpy((void *)entry_dest, (void *)entry, sizeof(struct mcrx_mnat_entry));
     LIST_INSERT_HEAD(&(*mnatmapp_dest)->mnats_head, entry_dest, mnat_entries);
   }
 
