@@ -15,6 +15,7 @@ AM_CPPFLAGS = \
 	-DSYSCONFDIR=\""$(sysconfdir)"\" \
 	-DLIBEXECDIR=\""$(libexecdir)"\" \
 	-I${top_srcdir}/include \
+	-I${top_srcdir}/json-c \
 	-I${top_srcdir}/src
 
 AM_CFLAGS = ${my_CFLAGS} \
@@ -40,7 +41,7 @@ LIBMCRX_CURRENT=2
 LIBMCRX_REVISION=0
 LIBMCRX_AGE=2
 
-pkginclude_HEADERS = include/mcrx/libmcrx.h include/mcrx/errors.h
+pkginclude_HEADERS = include/mcrx/libmcrx.h include/mcrx/errors.h 
 lib_LTLIBRARIES = libmcrx.la
 lib_LIBRARIES = libmcrx.a
 noinst_PROGRAMS = mcrx-check
@@ -56,7 +57,7 @@ libmcrx_a_SOURCES = $(libmcrx_la_SOURCES)
 libmcrx_a_CFLAGS = $(AM_CFLAGS)
 
 mcrx_check_SOURCES = test/mcrx-check.c
-mcrx_check_LDADD = libmcrx.a
+mcrx_check_LDADD = libmcrx.a json-c/libjson-c.a 
 
 # with thanks:
 # https://stackoverflow.com/questions/29811970/adding-linting-to-autotools-based-build-system
@@ -87,13 +88,14 @@ nodist_pkgconfig_DATA = src/libmcrx.pc
 EXTRA_DIST += src/libmcrx.pc.in
 CLEANFILES += src/libmcrx.pc
 
-TESTS = test/test1-libmcrx test/test2-libmcrx test/test-rejoin-same test/test-logstr
+TESTS = test/test1-libmcrx test/test2-libmcrx test/test-rejoin-same test/test-logstr test/test_util_file
 
 check_PROGRAMS = \
 		 test/test1-libmcrx \
 		 test/test2-libmcrx \
 		 test/test-logstr \
-		 test/test-rejoin-same
+		 test/test-rejoin-same \
+                 test/test_util_file
 
 test_test1_libmcrx_SOURCES = test/test1-libmcrx.c
 test_test1_libmcrx_LDADD = libmcrx.a
@@ -106,4 +108,7 @@ test_test_rejoin_same_LDADD = libmcrx.a
 
 test_test_logstr_SOURCES = test/test-logstr.c
 test_test_logstr_LDADD = libmcrx.a
+
+test_test_util_file_SOURCES = test/test_util_file.c
+test_test_util_file_LDADD = json-c/libjson-c.a 
 

@@ -12,6 +12,18 @@ args="--prefix=/usr \
 
 echo
 echo "----------------------------------------------------------------"
+echo "Build json-c lib"
+echo "----------------------------------------------------------------"
+echo
+\rm -rf json-c
+git clone https://github.com/json-c/json-c.git
+cd ./json-c
+cmake .
+make
+cd ..
+
+echo
+echo "----------------------------------------------------------------"
 echo "Initialized build system. For a common configuration please run:"
 echo "----------------------------------------------------------------"
 echo
