@@ -347,6 +347,31 @@ static enum mcrx_error_code mcrx_find_interface(
    */
   struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
 
+  enum MCRX_ADDR_TYPE addr_type = MCRX_ADDR_TYPE_UNKNOWN;
+  int family = AF_UNSPEC;
+
+  if (sub->mnat_entry == NULL) {
+    if (sub->input.addr_type != MCRX_ADDR_TYPE_V4
+        && sub->input.addr_type != MCRX_ADDR_TYPE_V6) {
+      return MCRX_ERR_UNKNOWN_FAMILY;
+    } else if (sub->input.addr_type == MCRX_ADDR_TYPE_V4) {
+      family = AF_INET;
+    } else {
+      family = AF_INET6;
+    }
+    addr_type = sub->input.addr_type;
+  } else {
+    if (sub->mnat_entry->local_addrs.addr_type != MCRX_ADDR_TYPE_V4
+        && sub->mnat_entry->local_addrs.addr_type != MCRX_ADDR_TYPE_V6) {
+      return MCRX_ERR_UNKNOWN_FAMILY;
+    } else if (sub->mnat_entry->local_addrs.addr_type == MCRX_ADDR_TYPE_V4) {
+      family = AF_INET;
+    } else {
+      family = AF_INET6;
+    }
+    addr_type = sub->mnat_entry->local_addrs.addr_type;
+  }
+
 #if 0
   // if (RTA_DST == 0) if getaddr(RTAX_DST), nrflags |= F_ISHOST
   // RTM_RESOLVE messages give "Invalid argument" errno on mac.
@@ -465,18 +490,21 @@ static enum mcrx_error_code mcrx_find_interface(
   int rc;
   int addr_len = 0;
   void* addr_p = 0;
-  int family = AF_UNSPEC;
 
   struct sockaddr_storage ss;
   struct sockaddr* sp = (struct sockaddr*)&ss;
   int sa_len = 0;
   int addr_offset = 0;
-  switch (sub->input.addr_type) {
+  switch (addr_type) {
     case MCRX_ADDR_TYPE_V4: {
       family = AF_INET;
       struct sockaddr_in* sp4 = (struct sockaddr_in*)sp;
       sp4->sin_family = AF_INET;
-      sp4->sin_addr = sub->input.addrs.v4.source;
+      if (sub->mnat_entry == NULL) {
+        sp4->sin_addr = sub->input.addrs.v4.source;
+      } else {
+        sp4->sin_addr = sub->mnat_entry->local_addrs.addrs.v4.source;
+      }
       // NB: no packets are generated or received on this socket, so the
       // port doesn't ever appear on the network.  But it still must be
       // a user-space port, so the socket can be created.
@@ -492,7 +520,11 @@ static enum mcrx_error_code mcrx_find_interface(
       family = AF_INET6;
       struct sockaddr_in6* sp6 = (struct sockaddr_in6*)sp;
       sp6->sin6_family = AF_INET6;
-      sp6->sin6_addr = sub->input.addrs.v6.source;
+      if (sub->mnat_entry == NULL) {
+        sp6->sin6_addr = sub->input.addrs.v6.source;
+      } else {
+        sp6->sin6_addr = sub->mnat_entry->local_addrs.addrs.v6.source;
+      }
       // NB: no packets are generated or received on this socket, so the
       // port doesn't ever appear on the network.  But it still must be
       // a user-space port, so the socket can be created.
@@ -726,6 +758,32 @@ static int native_receive(
   // keep subscription and ctx alive through callbacks even if unrefd.
   mcrx_ctx_ref(ctx);
   mcrx_subscription_ref(sub);
+
+  enum MCRX_ADDR_TYPE addr_type = MCRX_ADDR_TYPE_UNKNOWN;
+  int family = AF_UNSPEC;
+
+  if (sub->mnat_entry == NULL) {
+    if (sub->input.addr_type != MCRX_ADDR_TYPE_V4
+        && sub->input.addr_type != MCRX_ADDR_TYPE_V6) {
+      return MCRX_ERR_UNKNOWN_FAMILY;
+    } else if (sub->input.addr_type == MCRX_ADDR_TYPE_V4) {
+      family = AF_INET;
+    } else {
+      family = AF_INET6;
+    }
+    addr_type = sub->input.addr_type;
+  } else {
+    if (sub->mnat_entry->local_addrs.addr_type != MCRX_ADDR_TYPE_V4
+        && sub->mnat_entry->local_addrs.addr_type != MCRX_ADDR_TYPE_V6) {
+      return MCRX_ERR_UNKNOWN_FAMILY;
+    } else if (sub->mnat_entry->local_addrs.addr_type == MCRX_ADDR_TYPE_V4) {
+      family = AF_INET;
+    } else {
+      family = AF_INET6;
+    }
+    addr_type = sub->mnat_entry->local_addrs.addr_type;
+  }
+
   do {
     struct mcrx_packet *pkt = (struct mcrx_packet*)calloc(1,
         sizeof(struct mcrx_packet)+sub->max_payload_size);
@@ -777,7 +835,7 @@ static int native_receive(
       pkt->size = rc;
     }
 
-    switch (sub->input.addr_type) {
+    switch (addr_type) {
       case MCRX_ADDR_TYPE_V4: {
         struct sockaddr_in* sin = (struct sockaddr_in*)&ss;
         pkt->remote_port = htons(sin->sin_port);
@@ -831,15 +889,31 @@ enum mcrx_error_code mcrx_subscription_native_join(
     return MCRX_ERR_ALREADY_JOINED;
   }
 
+  enum MCRX_ADDR_TYPE addr_type = MCRX_ADDR_TYPE_UNKNOWN;
+
   int family;
-  if (sub->input.addr_type != MCRX_ADDR_TYPE_V4 &&
-      sub->input.addr_type != MCRX_ADDR_TYPE_V6) {
-      err(ctx, "sub %p (%s) address type not set\n", (void*)sub, desc);
+  if (sub->mnat_entry == NULL) {
+    if (sub->input.addr_type != MCRX_ADDR_TYPE_V4
+        && sub->input.addr_type != MCRX_ADDR_TYPE_V6) {
+      err(ctx, "sub %p (%s) address type not set\n", (void* )sub, desc);
       return MCRX_ERR_UNKNOWN_FAMILY;
-  } else if (sub->input.addr_type == MCRX_ADDR_TYPE_V4) {
-    family = AF_INET;
+    } else if (sub->input.addr_type == MCRX_ADDR_TYPE_V4) {
+      family = AF_INET;
+    } else {
+      family = AF_INET6;
+    }
+    addr_type = sub->input.addr_type;
   } else {
-    family = AF_INET6;
+    if (sub->mnat_entry->local_addrs.addr_type != MCRX_ADDR_TYPE_V4
+        && sub->mnat_entry->local_addrs.addr_type  != MCRX_ADDR_TYPE_V6) {
+      err(ctx, "sub %p (%s) mnat address type not set\n", (void* )sub, desc);
+      return MCRX_ERR_UNKNOWN_FAMILY;
+    } else if (sub->mnat_entry->local_addrs.addr_type == MCRX_ADDR_TYPE_V4) {
+      family = AF_INET;
+    } else {
+      family = AF_INET6;
+    }
+    addr_type = sub->mnat_entry->local_addrs.addr_type ;
   }
 
   int rc;
@@ -920,7 +994,7 @@ enum mcrx_error_code mcrx_subscription_native_join(
   } if_addr;
   void* if_addrp;
   int if_idx = -1;
-  switch (sub->input.addr_type) {
+  switch (addr_type) {
     case MCRX_ADDR_TYPE_V4:
       if_addrp = &if_addr.i4;
       break;
@@ -991,7 +1065,7 @@ enum mcrx_error_code mcrx_subscription_native_join(
    * linux comments are regarding 4.15.0-48-generic
    */
 
-  switch (sub->input.addr_type) {
+  switch (addr_type) {
     case MCRX_ADDR_TYPE_V4: {
       struct sockaddr_storage sinss_source = {0};
       struct sockaddr_in *sin4_source = (struct sockaddr_in*)&sinss_source;
@@ -999,10 +1073,18 @@ enum mcrx_error_code mcrx_subscription_native_join(
       struct sockaddr_in sin4_group = {0};
       sin4_group.sin_port = htons(sub->input.port);
       sin4_group.sin_family = AF_INET;
-      sin4_group.sin_addr = sub->input.addrs.v4.group;
+      if (sub->mnat_entry == NULL) {
+        sin4_group.sin_addr = sub->input.addrs.v4.group;
+      } else {
+        sin4_group.sin_addr = sub->mnat_entry->local_addrs.addrs.v4.group;
+      }
 
       sin4_source->sin_family = AF_INET;
-      sin4_source->sin_addr = sub->input.addrs.v4.source;
+      if (sub->mnat_entry == NULL) {
+        sin4_source->sin_addr = sub->input.addrs.v4.source;
+      } else {
+        sin4_source->sin_addr = sub->mnat_entry->local_addrs.addrs.v4.source;
+      }
 #if BSD
       sin4_group.sin_len = sizeof(struct sockaddr_in);
       sin4_source->sin_len = sizeof(struct sockaddr_in);
@@ -1093,10 +1175,18 @@ enum mcrx_error_code mcrx_subscription_native_join(
       struct sockaddr_in6 sin6_group = {0};
       sin6_group.sin6_port = htons(sub->input.port);
       sin6_group.sin6_family = AF_INET6;
-      sin6_group.sin6_addr = sub->input.addrs.v6.group;
+      if (sub->mnat_entry == NULL) {
+        sin6_group.sin6_addr = sub->input.addrs.v6.group;
+      } else {
+        sin6_group.sin6_addr = sub->mnat_entry->local_addrs.addrs.v6.group;
+      }
 
       sin6_source->sin6_family = AF_INET6;
-      sin6_source->sin6_addr = sub->input.addrs.v6.source;
+      if (sub->mnat_entry == NULL) {
+        sin6_source->sin6_addr = sub->input.addrs.v6.source;
+      } else {
+        sin6_source->sin6_addr = sub->mnat_entry->local_addrs.addrs.v6.source;
+      }
 #if BSD
       sin6_group.sin6_len = sizeof(struct sockaddr_in6);
       sin6_source->sin6_len = sizeof(struct sockaddr_in6);

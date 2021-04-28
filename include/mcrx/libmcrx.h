@@ -26,6 +26,7 @@
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <mcrx/errors.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,6 +47,13 @@ struct mcrx_ctx;
  * packets to library user.
  */
 struct mcrx_subscription;
+
+/**
+ * mcrx_mnatmap:
+ *
+ * mnat context handle.
+ */
+struct mcrx_mnatmap;
 
 /**
  * mcrx_packet:
@@ -137,6 +145,11 @@ enum mcrx_error_code mcrx_ctx_set_receive_socket_handlers(
         struct mcrx_ctx* ctx,
         int fd));
 
+enum mcrx_subscription_state {
+  MCRX_SUBSCRIPTION_STATE_UNJOINED,
+  MCRX_SUBSCRIPTION_STATE_PENDING, // pending mnat resolution
+  MCRX_SUBSCRIPTION_STATE_JOINED,
+};
 
 /**
  * mcrx_subscription_addrs_v4:
@@ -223,6 +236,38 @@ enum mcrx_error_code mcrx_subscription_new(
     const struct mcrx_subscription_config* config,
     struct mcrx_subscription** subp);
 
+/**
+ * mcrx_source_group_addrs:
+ *
+ * source and group address pair
+ */
+struct mcrx_source_group_addrs {
+  enum MCRX_ADDR_TYPE addr_type;
+  union {
+    struct mcrx_subscription_addrs_v4 v4;
+    struct mcrx_subscription_addrs_v6 v6;
+  } addrs;
+};
+
+enum mcrx_error_code mcrx_source_group_addrs_config_pton(
+    struct mcrx_source_group_addrs *addrs,
+    const char* source,
+    const char* group);
+enum mcrx_error_code mcrx_mnatmap_new(struct mcrx_mnatmap **mnatmapp);
+struct mcrx_mnatmap* mcrx_mnatmap_ref(struct mcrx_mnatmap *mnatmap);
+struct mcrx_mnatmap* mcrx_mnatmap_unref(struct mcrx_mnatmap *mnatmap);
+enum mcrx_error_code mcrx_mnatmap_add_or_update_mapping(
+    struct mcrx_mnatmap *mnatmap,
+    const struct mcrx_source_group_addrs *global_address,
+    const struct mcrx_source_group_addrs *local_address);
+enum mcrx_error_code mcrx_mnatmap_remove_mapping(struct mcrx_mnatmap *mnatmap,
+    const struct mcrx_source_group_addrs *global_address);
+enum mcrx_error_code mcrx_mnatmap_get_mapping(struct mcrx_mnatmap *mnatmap,
+    const struct mcrx_source_group_addrs *global_address,
+    struct mcrx_source_group_addrs *local_address);
+enum mcrx_error_code mcrx_mnatmap_apply(struct mcrx_ctx *ctx,
+    struct mcrx_mnatmap *mnatmap);
+
 /*
  * at entry to receive_cb, mcrx_packet_get_userdata returns the
  * same as mcrx_subscription_get_userdata for the sub.
@@ -236,6 +281,10 @@ void mcrx_subscription_set_receive_cb(
     struct mcrx_subscription* sub,
     int (*receive_cb)(
       struct mcrx_packet* packet));
+void mcrx_subscription_set_state_change_cb(
+    struct mcrx_subscription* sub,
+    int (*state_change_cb)(
+        struct mcrx_subscription* sub, enum mcrx_subscription_state state, enum mcrx_error_code result));
 
 void mcrx_subscription_set_max_payload(
     struct mcrx_subscription* sub,
