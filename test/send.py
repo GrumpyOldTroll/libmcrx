@@ -5,6 +5,7 @@ import socket
 import argparse
 import time
 from ipaddress import ip_address
+from math import ceil
 
 def main(args_in):
     parser = argparse.ArgumentParser(
@@ -69,7 +70,7 @@ def main(args_in):
 
     count = args.count
     if args.duration is not None:
-        count = ceil(duration * 1000 / args.interval)
+        count = ceil(args.duration * 1000 / args.interval)
 
     data = ''.join([f'{i:04x}' for i in range((args.size-1)//4 + 1)])[:args.size].encode()
 
