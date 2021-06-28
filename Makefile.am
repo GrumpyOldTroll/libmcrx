@@ -87,15 +87,19 @@ nodist_pkgconfig_DATA = src/libmcrx.pc
 EXTRA_DIST += src/libmcrx.pc.in
 CLEANFILES += src/libmcrx.pc
 
-TESTS = test/test1-libmcrx test/test-rejoin-same test/test-logstr
+TESTS = test/test1-libmcrx test/test2-libmcrx test/test-rejoin-same test/test-logstr
 
 check_PROGRAMS = \
 		 test/test1-libmcrx \
+		 test/test2-libmcrx \
 		 test/test-logstr \
 		 test/test-rejoin-same
 
 test_test1_libmcrx_SOURCES = test/test1-libmcrx.c
 test_test1_libmcrx_LDADD = libmcrx.a
+
+test_test2_libmcrx_SOURCES = test/test2-libmcrx.c
+test_test2_libmcrx_LDADD = libmcrx.a
 
 test_test_rejoin_same_SOURCES = test/test-rejoin-same.c
 test_test_rejoin_same_LDADD = libmcrx.a

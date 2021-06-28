@@ -134,12 +134,36 @@ struct mcrx_subscription {
   int (*receive_cb)(struct mcrx_packet* packet);
   int joined;
   const char* override_ifname;
+  struct mcrx_mnat_entry *mnat_entry;
+  enum mcrx_subscription_state state;
+  int (*state_change_cb)(struct mcrx_subscription *sub, enum mcrx_subscription_state state, enum mcrx_error_code result);
 };
 
 enum mcrx_socket_handling_state {
   MCRX_SOCKHANDLER_UNCOMMITTED,
   MCRX_SOCKHANDLER_BUILTIN,
   MCRX_SOCKHANDLER_EXTERNAL
+};
+
+/**
+ * mcrx_mnat_entry:
+ *
+ * Opaque object representing a mnat entry.
+ */
+struct mcrx_mnat_entry {
+  LIST_ENTRY(mcrx_mnat_entry) mnat_entries;
+  struct mcrx_source_group_addrs local_addrs;
+  struct mcrx_source_group_addrs global_addrs;
+};
+
+/**
+ * mcrx_mnat_map:
+ *
+ * Opaque object representing a mnat context.
+ */
+struct mcrx_mnatmap {
+  int refcount;
+  LIST_HEAD(mnat_listhead, mcrx_mnat_entry) mnats_head;
 };
 
 /**
@@ -158,6 +182,7 @@ struct mcrx_ctx {
   intptr_t userdata;
   enum mcrx_log_priority log_priority;
   LIST_HEAD(listhead, mcrx_subscription) subs_head;
+  struct mcrx_mnatmap *mnat_map;
   int timeout_ms;
   int wait_fd;
   sigset_t wait_sigmask;
@@ -210,6 +235,17 @@ void wrap_strerr(
     int err_no,
     char* buf,
     int len);
+
+struct mcrx_mnat_entry* mcrx_mnatmap_find_entry(struct mcrx_mnatmap *mnatmap,
+    const struct mcrx_source_group_addrs *global_address);
+struct mcrx_mnat_entry* mcrx_mnatmap_find_or_alloc_entry_from_subscription(
+    struct mcrx_subscription *sub, struct mcrx_mnatmap *mnatmap);
+enum mcrx_error_code mcrx_mnatmap_clone(struct mcrx_mnatmap *mnatmap_src,
+    struct mcrx_mnatmap **mnatmapp_dest);
+bool mcrx_mnatmap_entry_unresolved(struct mcrx_mnat_entry* entry);
+bool mcrx_mnatmap_entry_local_equal(struct mcrx_mnat_entry* entry_src, struct mcrx_mnat_entry* entry_dest);
+bool mcrx_mnatmap_entry_global_equal(struct mcrx_mnat_entry* entry_src, struct mcrx_mnat_entry* entry_dest);
+bool mcrx_mnatmap_address_equal(struct mcrx_source_group_addrs * addr1, struct mcrx_source_group_addrs *addr2);
 
 enum mcrx_error_code handle_close_error_impl(
     struct mcrx_ctx* ctx,
