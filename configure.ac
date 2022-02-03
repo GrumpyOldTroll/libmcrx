@@ -1,15 +1,11 @@
-AC_PREREQ(2.60)
-AC_INIT([mcrx],
-        [1],
-        [jakeholland.net@gmail.com],
-        [mcrx],
-        [http://github.com/GrumpyOldTroll/libmcrx])
+AC_PREREQ([2.69])
+AC_INIT([mcrx],[1],[jakeholland.net@gmail.com],[mcrx],[http://github.com/GrumpyOldTroll/libmcrx])
 AC_CONFIG_SRCDIR([src/libmcrx.c])
+AC_CONFIG_HEADERS(config.h)
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_LIBOBJ_DIR([portable])
 AM_INIT_AUTOMAKE([check-news foreign 1.11 -Wall -Werror -Wno-portability silent-rules tar-pax no-dist-gzip dist-xz subdir-objects])
 AM_MAINTAINER_MODE
-AC_PROG_CC_STDC
 AC_USE_SYSTEM_EXTENSIONS
 AC_SYS_LARGEFILE
 AC_CONFIG_MACRO_DIR([m4])
@@ -17,8 +13,30 @@ AM_SILENT_RULES([yes])
 LT_INIT([disable-static pic-only])
 AC_PREFIX_DEFAULT([/usr])
 
+# Checks for programs.
 AC_PROG_SED
+AC_PROG_CXX
+AC_PROG_AWK
+AC_PROG_CC
+AC_PROG_CPP
+AC_PROG_INSTALL
+AC_PROG_LN_S
+AC_PROG_MAKE_SET
 AC_PROG_MKDIR_P
+
+# Checks for header files.
+AC_CHECK_HEADERS([arpa/inet.h fcntl.h inttypes.h netinet/in.h stddef.h stdint.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h syslog.h unistd.h])
+
+# Checks for typedefs, structures, and compiler characteristics.
+AC_CHECK_HEADER_STDBOOL
+AC_C_INLINE
+AC_TYPE_UINT16_T
+AC_TYPE_UINT8_T
+
+# Checks for library functions.
+AC_FUNC_REALLOC
+AC_FUNC_STRERROR_R
+AC_CHECK_FUNCS([bzero memmove memset socket strerror strtol])
 
 AC_ARG_ENABLE([logging],
         AS_HELP_STRING([--disable-logging], [disable system logging @<:@default=enabled@:>@]),
@@ -64,12 +82,11 @@ my_CFLAGS="-pedantic -Wall -Wextra \
 -Wformat-security"
 AC_SUBST([my_CFLAGS])
 
-AC_CONFIG_HEADERS(config.h)
 AC_CONFIG_FILES([
         Makefile
 ])
-
 AC_OUTPUT
+
 AC_MSG_RESULT([
         $PACKAGE $VERSION
         =====
