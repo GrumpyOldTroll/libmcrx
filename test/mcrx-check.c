@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
-#include <ctype.h>
 #include <errno.h>
 #include <unistd.h>
 #include <time.h>
@@ -142,7 +141,7 @@ main(int argc, char *argv[]) {
 
   if (!port_str) {
     fprintf(stderr, "port (-p/--port <num>) is required\n");
-    fail = 1;
+    return EXIT_FAILURE;
   } else {
     rc = sscanf(port_str, "%d", &port);
     if (rc != 1) {
