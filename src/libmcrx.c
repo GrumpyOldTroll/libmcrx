@@ -108,7 +108,6 @@ static void log_string_cb(
     buf[len] = 0;
   } else {
     buf[sizeof(buf)-1] = 0;
-    len = sizeof(buf);
   }
   ctx->string_log_fn(ctx, priority, file, line, fn, buf);
 }
