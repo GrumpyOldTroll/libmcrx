@@ -16,3 +16,9 @@ Makefile.in
 /stamp-h1
 .*.sw?
 *~
+.idea/
+build/
+libmcrx.a
+libmcrx.la
+mcrx-check
+
