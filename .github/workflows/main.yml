@@ -1,0 +1,55 @@
+#  libmcrx - multicast receiving library
+#
+#  Permission to use, copy, modify, and/or distribute this software for any
+#  purpose with or without fee is hereby granted.
+#
+#  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+#  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+#  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+#  ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+#  WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+#  ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+#  OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+name: Build and Clean
+on:
+  push:
+    branches:
+      - '*'
+    tags-ignore:
+      - '*'
+  pull_request:
+jobs:
+  build_and_test:
+    name: Autotools build on ${{matrix.os}} using ${{matrix.cc}} ${{matrix.posix}}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04, macos-11]
+        cc: [gcc, clang]
+    env:
+      CC: ${{ matrix.cc }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Fetch Dependencies
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            set -x
+            sudo apt-get update
+            sudo apt-get -y upgrade
+            sudo apt-get install autoconf automake libtool
+          fi
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            set -x
+            brew install automake autoconf automake libtool
+          fi
+      - name: Build and Clean
+        run: |
+          set -x
+          ./autogen.sh
+          ./configure
+          make
+          make clean
+          make dist
+          make distclean

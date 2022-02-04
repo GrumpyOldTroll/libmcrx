@@ -2,6 +2,9 @@
 
 libmcrx is a low-level library for receiving multicast UDP traffic.
 
+[![Build](https://github.com/GrumpyOldTroll/libmcrx/actions/workflows/main.yml/badge.svg)](https://github.com/GrumpyOldTroll/libmcrx/actions/workflows/main.yml)
+[![Clang Static Analysis](https://github.com/GrumpyOldTroll/libmcrx/actions/workflows/clang-analyzer.yml/badge.svg)](https://github.com/GrumpyOldTroll/libmcrx/actions/workflows/clang-analyzer.yml)
+
 ## Motivation
 
 The code for receiving multicast traffic is different on different platforms, and has some quirks and complexities.
