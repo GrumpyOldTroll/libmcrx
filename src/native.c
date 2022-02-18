@@ -57,8 +57,11 @@ suffering_and_woe_join_method_undefined;
 void wrap_strerr(int eno, char* buf, int len) {
 #ifdef __linux__
   const char* ret = strerror_r(eno, buf, len);
-  if (ret != buf) {
-    strncpy(buf, ret, len);
+  if (ret != buf && len > 0) {
+    // ensure it's null-terminated.
+    // see: https://en.cppreference.com/w/c/string/byte/strncpy
+    strncpy(buf, ret, len-1);
+    buf[len-1] = 0;
   }
 #elif defined(__APPLE__)
   int rc = strerror_r(eno, buf, len);
@@ -351,24 +354,8 @@ static enum mcrx_error_code mcrx_find_interface(
   int family = AF_UNSPEC;
 
   if (sub->mnat_entry == NULL) {
-    if (sub->input.addr_type != MCRX_ADDR_TYPE_V4
-        && sub->input.addr_type != MCRX_ADDR_TYPE_V6) {
-      return MCRX_ERR_UNKNOWN_FAMILY;
-    } else if (sub->input.addr_type == MCRX_ADDR_TYPE_V4) {
-      family = AF_INET;
-    } else {
-      family = AF_INET6;
-    }
     addr_type = sub->input.addr_type;
   } else {
-    if (sub->mnat_entry->local_addrs.addr_type != MCRX_ADDR_TYPE_V4
-        && sub->mnat_entry->local_addrs.addr_type != MCRX_ADDR_TYPE_V6) {
-      return MCRX_ERR_UNKNOWN_FAMILY;
-    } else if (sub->mnat_entry->local_addrs.addr_type == MCRX_ADDR_TYPE_V4) {
-      family = AF_INET;
-    } else {
-      family = AF_INET6;
-    }
     addr_type = sub->mnat_entry->local_addrs.addr_type;
   }
 
@@ -695,7 +682,7 @@ static enum mcrx_error_code mcrx_find_interface(
             }
             struct sockaddr_in6* sa6 =
               ((struct sockaddr_in6*)cur_ifa->ifa_addr);
-            if (IN6_IS_ADDR_LINKLOCAL(&sa6->sin6_addr)) {
+            if (sa6 && IN6_IS_ADDR_LINKLOCAL((&sa6->sin6_addr))) {
               memcpy(if_addr, &sa6->sin6_addr, addr_len);
               found = 1;
               break;
@@ -760,27 +747,10 @@ static int native_receive(
   mcrx_subscription_ref(sub);
 
   enum MCRX_ADDR_TYPE addr_type = MCRX_ADDR_TYPE_UNKNOWN;
-  int family = AF_UNSPEC;
 
   if (sub->mnat_entry == NULL) {
-    if (sub->input.addr_type != MCRX_ADDR_TYPE_V4
-        && sub->input.addr_type != MCRX_ADDR_TYPE_V6) {
-      return MCRX_ERR_UNKNOWN_FAMILY;
-    } else if (sub->input.addr_type == MCRX_ADDR_TYPE_V4) {
-      family = AF_INET;
-    } else {
-      family = AF_INET6;
-    }
     addr_type = sub->input.addr_type;
   } else {
-    if (sub->mnat_entry->local_addrs.addr_type != MCRX_ADDR_TYPE_V4
-        && sub->mnat_entry->local_addrs.addr_type != MCRX_ADDR_TYPE_V6) {
-      return MCRX_ERR_UNKNOWN_FAMILY;
-    } else if (sub->mnat_entry->local_addrs.addr_type == MCRX_ADDR_TYPE_V4) {
-      family = AF_INET;
-    } else {
-      family = AF_INET6;
-    }
     addr_type = sub->mnat_entry->local_addrs.addr_type;
   }
 

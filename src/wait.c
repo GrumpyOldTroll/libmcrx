@@ -654,6 +654,9 @@ int mcrx_prv_remove_socket_cb(
     struct epoll_event* evt;
     evt = &ctx->events[idx];
     struct mcrx_fd_handle* cur_cb = (struct mcrx_fd_handle*)evt->data.ptr;
+    if (cur_cb->fd != fd) {
+      continue;
+    }
     if (cur_cb->ctx != ctx) {
       err(ctx, "internal error: wrong ctx on %d\n", fd);
     }
