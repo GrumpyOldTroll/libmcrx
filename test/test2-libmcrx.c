@@ -79,9 +79,13 @@ main(int argc, char *argv[])
     return EXIT_FAILURE;
   }
   struct mcrx_source_group_addrs global_addr;
-  mcrx_source_group_addrs_config_pton(&global_addr, "23.212.185.5", "232.11.11.11");
+  const char* global_group = "239.11.11.11";
+  const char* global_src = "10.10.10.10";
+  mcrx_source_group_addrs_config_pton(&global_addr, global_src, global_group);
   struct mcrx_source_group_addrs local_addr;
-  mcrx_source_group_addrs_config_pton(&local_addr, "10.10.10.10", "239.11.11.11");
+  // mcrx_source_group_addrs_config_pton(&global_addr, "23.212.185.5", "232.11.11.11");
+  // mcrx_source_group_addrs_config_pton(&local_addr, "10.10.10.10", "239.11.11.11");
+  mcrx_source_group_addrs_config_pton(&local_addr, "23.212.185.5", "232.1.1.1");
   err = mcrx_mnatmap_add_or_update_mapping(mnatmap, &global_addr, &local_addr);
   if (err != 0) {
     fprintf(stderr, "mcrx_mnatmapadd_entry failed\n");
@@ -91,7 +95,7 @@ main(int argc, char *argv[])
   mcrx_mnatmap_apply(ctx, mnatmap);
 
   struct mcrx_subscription_config cfg = MCRX_SUBSCRIPTION_CONFIG_INIT;
-  err = mcrx_subscription_config_pton(&cfg, "23.212.185.5", "232.11.11.11");
+  err = mcrx_subscription_config_pton(&cfg, global_src, global_group);
   if (err != 0) {
     fprintf(stderr, "subscription_config_pton failed\n");
     mcrx_ctx_unref(ctx);
@@ -109,7 +113,7 @@ main(int argc, char *argv[])
 
   mcrx_subscription_set_userdata(sub, (intptr_t)&info);
   mcrx_subscription_set_receive_cb(sub, receive_cb);
-  mcrx_ctx_set_wait_ms(ctx, 5000);
+  mcrx_ctx_set_wait_ms(ctx, 5001);
 
   err = mcrx_subscription_join(sub);
   if (err != 0) {

@@ -1091,8 +1091,14 @@ enum mcrx_error_code mcrx_subscription_native_join(
 #elif USE_JOIN_STRATEGY_ADDMEM
       struct ip_mreq_source mreq;
       memset(&mreq, 0, sizeof(mreq));
-      mreq.imr_multiaddr = sub->input.addrs.v4.group;
-      mreq.imr_sourceaddr = sub->input.addrs.v4.source;
+      if (sub->mnat_entry == NULL) {
+        mreq.imr_multiaddr = sub->input.addrs.v4.group;
+        mreq.imr_sourceaddr = sub->input.addrs.v4.source;
+      } else {
+        mreq.imr_multiaddr =sub->mnat_entry->local_addrs.addrs.v4.group; 
+        mreq.imr_sourceaddr = sub->mnat_entry->local_addrs.addrs.v4.source;
+      }
+
       mreq.imr_interface = *((struct in_addr*)if_addrp);
       rc = setsockopt(sock_fd, IPPROTO_IP, IP_ADD_SOURCE_MEMBERSHIP,
           &mreq, sizeof(mreq));
@@ -1115,9 +1121,14 @@ enum mcrx_error_code mcrx_subscription_native_join(
       struct sockaddr_in* gsr_src = (struct sockaddr_in*)&gsreq.gsr_source;
       struct sockaddr_in* gsr_grp = (struct sockaddr_in*)&gsreq.gsr_group;
       gsr_src->sin_family = AF_INET;
-      gsr_src->sin_addr = sub->input.addrs.v4.source;
       gsr_grp->sin_family = AF_INET;
-      gsr_grp->sin_addr = sub->input.addrs.v4.group;
+      if (sub->mnat_entry == NULL) {
+        gsr_src->sin_addr = sub->input.addrs.v4.source;
+        gsr_grp->sin_addr = sub->input.addrs.v4.group;
+      } else {
+        gsr_src->sin_addr = sub->mnat_entry->local_addrs.addrs.v4.source;
+        gsr_grp->sin_addr = sub->mnat_entry->local_addrs.addrs.v4.group;
+      }
 #if BSD
       gsr_src->sin_len = sizeof(*gsr_src);
       gsr_grp->sin_len = sizeof(*gsr_grp);
@@ -1192,8 +1203,13 @@ enum mcrx_error_code mcrx_subscription_native_join(
       // support for this seems present in freebsd but nowhere else?
       struct ipv6_mreq_source mreq;
       memset(&mreq, 0, sizeof(mreq));
-      mreq.ipv6mr_multiaddr = sub->input.addrs.v6.group;
-      mreq.ipv6mr_sourceaddr = sub->input.addrs.v6.source;
+      if (sub->mnat_entry == NULL) {
+        mreq.ipv6mr_multiaddr = sub->input.addrs.v6.group;
+        mreq.ipv6mr_sourceaddr = sub->input.addrs.v6.source;
+      } else {
+        mreq.ipv6mr_multiaddr = sub->mnat_entry->local_addrs.addrs.v6.group;
+        mreq.ipv6mr_sourceaddr = sub->mnat_entry->local_addrs.addrs.v6.source;
+      }
       mreq.ipv6mr_interface = if_idx;
       rc = setsockopt(sock_fd, IPPROTO_IP, IPV6_ADD_SOURCE_MEMBERSHIP,
           &mreq, sizeof(mreq));
@@ -1223,9 +1239,14 @@ enum mcrx_error_code mcrx_subscription_native_join(
       struct sockaddr_in6* gsr_src = (struct sockaddr_in6*)&gsreq.gsr_source;
       struct sockaddr_in6* gsr_grp = (struct sockaddr_in6*)&gsreq.gsr_group;
       gsr_src->sin6_family = AF_INET6;
-      gsr_src->sin6_addr = sub->input.addrs.v6.source;
       gsr_grp->sin6_family = AF_INET6;
-      gsr_grp->sin6_addr = sub->input.addrs.v6.group;
+      if (sub->mnat_entry == NULL) {
+        gsr_src->sin6_addr = sub->input.addrs.v6.source;
+        gsr_grp->sin6_addr = sub->input.addrs.v6.group;
+      } else {
+        gsr_src->sin6_addr = sub->mnat_entry->local_addrs.addrs.v6.source;
+        gsr_grp->sin6_addr = sub->mnat_entry->local_addrs.addrs.v6.group;
+      }
 #if BSD
       gsr_src->sin6_len = sizeof(*gsr_src);
       gsr_grp->sin6_len = sizeof(*gsr_grp);

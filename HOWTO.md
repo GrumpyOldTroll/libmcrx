@@ -130,11 +130,11 @@ There is some live traffic with associated [AMTRELAY](https://www.rfc-editor.org
 Akamai runs some traffic this way and other sources might advertise relays this way as well.
 
 AMT relays for traffic like this can be discovered with [driad.py](https://github.com/GrumpyOldTroll/libmcrx/driad.py).
-For example, to discover the right relay for (23.212.185.4, 232.1.1.1), you would run:
+For example, to discover the right relay for (23.212.185.5, 232.1.1.1), you would run:
 
 ~~~
 curl -O https://raw.githubusercontent.com/GrumpyOldTroll/libmcrx/master/driad.py
-RELAYIP=$(python3 driad.py 23.212.185.4)
+RELAYIP=$(python3 driad.py 23.212.185.5)
 ~~~
 
 #### Picking A Known Relay
@@ -164,20 +164,20 @@ docker run -d --rm --name amtgw --privileged grumpyoldtroll/amtgw $RELAYIP
 This will let you receive traffic in the `docker0` network:
 
 ~~~
-./mcrx-check -s 23.212.185.4 -g 232.1.1.1 -p 5001 -i docker0 -d 0 -n 10
+./mcrx-check -s 23.212.185.5 -g 232.1.1.1 -p 5001 -i docker0 -d 0 -n 10
 ~~~
 
 Instead of specifying an interface override, it's also possible to set a route for the source IP toward the interface where the AMT gateway will produce traffic:
 
 ~~~
-sudo ip route add 23.212.185.4/32 dev docker0
-mcrx-check -s 23.212.185.4 -g 232.1.1.1 -p 5001 -d 0 -c 10
+sudo ip route add 23.212.185.5/32 dev docker0
+mcrx-check -s 23.212.185.5 -g 232.1.1.1 -p 5001 -d 0 -c 10
 ~~~
 
 When you're done with the traffic, it's wise to clean up by removing the route if you added one and stopping the container:
 
 ~~~
-sudo ip route del 23.212.185.4/32 dev docker0
+sudo ip route del 23.212.185.5/32 dev docker0
 docker stop amtgw
 ~~~
 
