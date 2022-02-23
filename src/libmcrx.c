@@ -43,6 +43,23 @@
  * and is passed to all library operations.
  */
 
+static void log_stderr(
+    struct mcrx_ctx *ctx,
+    int priority,
+    const char *file,
+    int line,
+    const char *fn,
+    const char *format,
+    va_list args) {
+  UNUSED(ctx);
+  UNUSED(priority);
+  UNUSED(file);
+  UNUSED(line);
+
+  fprintf(stderr, "libmcrx: %s: ", fn);
+  vfprintf(stderr, format, args);
+}
+
 /*
  * mcrx_log:
  *
@@ -60,25 +77,12 @@ void mcrx_log(
   va_list args;
 
   va_start(args, format);
-  ctx->log_fn(ctx, priority, file, line, fn, format, args);
+  if (ctx) {
+    ctx->log_fn(ctx, priority, file, line, fn, format, args);
+  } else {
+    log_stderr(ctx, priority, file, line, fn, format, args);
+  }
   va_end(args);
-}
-
-static void log_stderr(
-    struct mcrx_ctx *ctx,
-    int priority,
-    const char *file,
-    int line,
-    const char *fn,
-    const char *format,
-    va_list args) {
-  UNUSED(ctx);
-  UNUSED(priority);
-  UNUSED(file);
-  UNUSED(line);
-
-  fprintf(stderr, "libmcrx: %s: ", fn);
-  vfprintf(stderr, format, args);
 }
 
 static void log_string_cb(
@@ -800,7 +804,15 @@ MCRX_EXPORT void mcrx_subscription_set_state_change_cb(
  **/
 MCRX_EXPORT enum mcrx_error_code mcrx_subscription_join(
     struct mcrx_subscription* sub) {
-  if (sub && sub->ctx && sub->ctx->mnat_map) {
+  struct mcrx_ctx* ctx = mcrx_subscription_get_ctx(sub);
+  if (!sub) {
+    return MCRX_ERR_NULLARG;
+  }
+  if (!ctx) {
+    warn(ctx, "detached subscription %p ctx NULL on unref\n", (void *)sub);
+    return MCRX_ERR_INTERNAL_ERROR;
+  }
+  if (ctx->mnat_map) {
     sub->mnat_entry = mcrx_mnatmap_find_or_alloc_entry_from_subscription(sub, sub->ctx->mnat_map);
     if (sub->mnat_entry == NULL || mcrx_mnatmap_entry_unresolved(sub->mnat_entry)) {
       // if we can not find a mnap entry or the entry is unresolved for local address
@@ -814,10 +826,7 @@ MCRX_EXPORT enum mcrx_error_code mcrx_subscription_join(
   }
   enum mcrx_error_code err = mcrx_subscription_native_join(sub);
   if (err == MCRX_ERR_OK) {
-    struct mcrx_ctx* ctx = (struct mcrx_ctx*)mcrx_subscription_get_ctx(sub);
-    if (ctx) {
-      ctx->live_subs++;
-    }
+    ctx->live_subs++;
     sub->state = MCRX_SUBSCRIPTION_STATE_JOINED;
     if (sub->state_change_cb) {
       sub->state_change_cb(sub, sub->state, MCRX_ERR_OK);

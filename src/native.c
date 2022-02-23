@@ -542,6 +542,11 @@ static enum mcrx_error_code mcrx_find_interface(
     rc = connect(check_sock, sp, sa_len);
     if (rc < 0) {
       err(ctx, "sub %p connect() failed\n", (void*)sub);
+      int prev_errno = errno;
+      if (close(check_sock) < 0) {
+        handle_close_error(ctx);
+      }
+      errno = prev_errno;  // suppress close error, if present.
       return handle_connect_error(ctx);
     }
 
@@ -819,6 +824,9 @@ static int native_receive(
       default:
         err(ctx, "sub %p internal error: unknown family while receiving\n",
             (void*)sub);
+        free(pkt);
+        mcrx_subscription_unref(sub);
+        mcrx_ctx_unref(ctx);
         return MCRX_RECEIVE_STOP_CTX;
     }
 
