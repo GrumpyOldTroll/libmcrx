@@ -22,4 +22,4 @@ libmcrx.a
 libmcrx.la
 mcrx-check
 *tar*
-
+cov-int/

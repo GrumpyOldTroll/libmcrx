@@ -56,8 +56,15 @@ mcrx_log_null(struct mcrx_ctx *ctx, const char *format, ...) {
 
 #define mcrx_log_cond(ctx, prio, file, line, func, ...)                   \
   do {                                                                    \
-    if (mcrx_ctx_get_log_priority(ctx) >= prio)                           \
-      mcrx_log(ctx, prio, file, line, func, __VA_ARGS__); \
+    int INSIDE_DEF_lpr;                                                   \
+    if (!(ctx)) {                                                         \
+      INSIDE_DEF_lpr = MCRX_LOGLEVEL_WARNING;                             \
+    } else {                                                              \
+      INSIDE_DEF_lpr = mcrx_ctx_get_log_priority(ctx);                    \
+    }                                                                     \
+    if (INSIDE_DEF_lpr >= (prio)) {                                       \
+      mcrx_log(ctx, prio, file, line, func, __VA_ARGS__);                 \
+    }                                                                     \
   } while (0)
 
 #ifdef DISABLE_DEBUG

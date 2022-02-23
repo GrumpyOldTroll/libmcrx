@@ -600,6 +600,10 @@ int mcrx_prv_add_socket_cb(
       handle, fd, (void*)new_cb);
 
   if (ctx->events == NULL) {
+    if (ctx->nevents != 0) {
+      warn(ctx, "internal error: inconsistent nevents=%d with null events (fixed to 0)\n", ctx->nevents);
+      ctx->nevents=0;
+    }
     ctx->events = (struct epoll_event*)calloc(1,
         sizeof(struct epoll_event));
     if (!ctx->events) {
