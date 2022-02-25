@@ -432,6 +432,18 @@ MCRX_EXPORT enum mcrx_error_code mcrx_ctx_new(
     mcrx_ctx_set_log_priority(c, prio);
   }
   LIST_INIT(&c->subs_head);
+  /*
+   * Coverity reports here:
+   * CID 379314 (#1 of 1): Calling risky function (DC.WEAK_CRYPTO)
+   * dont_call: random should not be used for security-related applications,
+   * because linear congruential algorithms are too easy to break.
+   *
+   * This error is a false positive for the usage here, as this is not a
+   * crypto application but rather a desynchronization usage, so we suppress
+   * the (low impact) warning.
+   * -jake 2022-02-24
+   */
+  // coverity[dont_call]
   c->timeout_ms = 1000 + random() % 1000;
   c->add_socket_cb = mcrx_prv_add_socket_cb;
   c->remove_socket_cb = mcrx_prv_remove_socket_cb;
@@ -506,7 +518,9 @@ MCRX_EXPORT struct mcrx_ctx *mcrx_ctx_unref(
 
   if (ctx->wait_fd != -1) {
     err(ctx, "wait_fd still alive when deleting context %p\n", (void*)ctx);
-    close(ctx->wait_fd);
+    if (close(ctx->wait_fd)) {
+      handle_close_error(ctx);
+    }
     ctx->wait_fd = -1;
   }
 

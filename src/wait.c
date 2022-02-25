@@ -94,7 +94,9 @@ MCRX_EXPORT enum mcrx_error_code mcrx_ctx_receive_packets(
       ctx->triggered = NULL;
       ctx->ntriggered = 0;
       if (ctx->wait_fd != -1) {
-        close(ctx->wait_fd);
+        if (close(ctx->wait_fd)) {
+          handle_close_error(ctx);
+        }
         ctx->wait_fd = -1;
       }
       return MCRX_ERR_NOTHING_JOINED;
@@ -349,7 +351,9 @@ int mcrx_prv_remove_socket_cb(
       if (ctx->nevents == 0) {
         free(ctx->events);
         ctx->events = 0;
-        close(ctx->wait_fd);
+        if (close(ctx->wait_fd)) {
+          handle_close_error(ctx);
+        }
         ctx->wait_fd = -1;
       } else {
         ctx->events = (struct kevent*)realloc(ctx->events,
@@ -440,7 +444,9 @@ MCRX_EXPORT enum mcrx_error_code mcrx_ctx_receive_packets(
       ctx->triggered = NULL;
       ctx->ntriggered = 0;
       if (ctx->wait_fd != -1) {
-        close(ctx->wait_fd);
+        if (close(ctx->wait_fd)) {
+          handle_close_error(ctx);
+        }
         ctx->wait_fd = -1;
       }
       return MCRX_ERR_NOTHING_JOINED;
@@ -680,7 +686,9 @@ int mcrx_prv_remove_socket_cb(
     if (ctx->nevents == 0) {
       free(ctx->events);
       ctx->events = 0;
-      close(ctx->wait_fd);
+      if (close(ctx->wait_fd)) {
+        handle_close_error(ctx);
+      }
       ctx->wait_fd = -1;
     } else {
       ctx->events = (struct epoll_event*)realloc(ctx->events,
