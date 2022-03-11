@@ -42,13 +42,21 @@ def main(args_in):
             description='''
 Use DNS RRType 260 to look up an AMT relay known to a multicast
 sender, identified by the sending IP address of a (S,G).  See
-draft-ietf-mboned-driad-amt-discovery for details.''')
+RFC 8777 for details.''')
 
     parser.add_argument('-v', '--verbose', action='count')
-    parser.add_argument('SourceIP', help='source ip of a multicast source')
+    parser.add_argument('SourceIP', help='source ip of a multicast sender')
     parser.add_argument('-r', '--resolver', help='use a specific DNS resolver')
+    parser.add_argument('-a', '--all', action='store_true', default=False, help='show all addresses (ordered by precedence/random when equal, "#" prefixed for less-preferred)')
+    parser.add_argument('-f', '--family', choices=('any', '4', '6'), default='4', help='address family to accept (default=4 for ossified usage compatibility, sorry)')
 
     args = parser.parse_args(args_in[1:])
+    no4, no6 = False, False
+    if args.family == '4':
+        no6 = True
+    elif args.family == '6':
+        no4 = True
+
     source_ip_str = args.SourceIP
 
     source_ip = ipaddress.ip_address(source_ip_str)
@@ -91,12 +99,15 @@ draft-ietf-mboned-driad-amt-discovery for details.''')
                 continue
         possibilities.append((cur_precedence, m))
 
+    prec_group = ''
+    found = 0
     possibilities.sort()
     for prec, equal_group in groupby(possibilities, lambda x: x[0]):
         equal_list = list(equal_group)
         if len(equal_list) > 1:
             random.shuffle(equal_list)
 
+        group_found = 0
         for prec, m in equal_list:
             typ_str, relay = m.group('type'), m.group('relay')
             if typ_str:
@@ -112,9 +123,17 @@ draft-ietf-mboned-driad-amt-discovery for details.''')
                             int(loc[2:4],16),
                             int(loc[4:6],16),
                             int(loc[6:8],16))
+                    if no4:
+                        if args.verbose:
+                            print('  excluding %s from family=6' % relay, file=sys.stderr)
+                        continue
                 elif typ == 2:
                     relay = ipaddress.ip_address(':'.join(
                         [loc[i:i+4] for i in range(0,32,4)])).compressed
+                    if no6:
+                        if args.verbose:
+                            print('  excluding %s from family=4' % relay, file=sys.stderr)
+                        continue
                 elif typ == 3:
                     ix = 0
                     names = []
@@ -137,16 +156,16 @@ draft-ietf-mboned-driad-amt-discovery for details.''')
 
             if typ == 3:
                 if args.resolver is None:
-                    secondary_dig_cmd = ['dig', '+short', relay.encode('ascii')]
+                    secondary_dig_cmd = ['dig', '+short', relay.encode('ascii'), 'AAAA', relay.encode('ascii'), 'A']
                 else:
                     resolver = "@"+args.resolver
-                    secondary_dig_cmd = ['dig', '+short', resolver, relay.encode('ascii')]
+                    secondary_dig_cmd = ['dig', '+short', resolver, relay.encode('ascii'), 'AAAA', relay.encode('ascii'), 'A']
                 if args.verbose:
                     print('  running "%s"' % ' '.join([str(x) for x in secondary_dig_cmd]),
                         file=sys.stderr)
                 out  = subprocess.check_output(secondary_dig_cmd).decode('ascii').strip()
                 if not out:
-                    print('  rejecting: %s failed: %s' % (' '.join(secondary_dig_cmd), out), file=sys.stderr)
+                    print('  rejecting: %s failed: %s' % (' '.join([str(x) for x in secondary_dig_cmd]), out), file=sys.stderr)
                     continue
                 addrs = []
                 for line in out.split('\n'):
@@ -154,19 +173,44 @@ draft-ietf-mboned-driad-amt-discovery for details.''')
                         addr = ipaddress.ip_address(line.strip())
                     except:
                         continue
+                    if no4 and addr.version == 4:
+                        if args.verbose:
+                            print('  excluding %s via %s from family=6' % (addr, relay), file=sys.stderr)
+                        continue
+                    elif no6 and addr.version == 6:
+                        if args.verbose:
+                            print('  excluding %s via %s from family=4' % (addr, relay), file=sys.stderr)
+                        continue
                     addrs.append(line.strip())
                 if len(addrs) == 0:
-                    print('  rejecting: %s no addresses found in output: %s' % (' '.join(secondary_dig_cmd), out), file=sys.stderr)
+                    if args.verbose:
+                        print('  rejecting: %s no usable addresses found in output: %s' % (' '.join([str(x) for x in secondary_dig_cmd]), out), file=sys.stderr)
                     continue
 
-                relay = addrs[random.randint(0, len(addrs)-1)]
+                if len(addrs) > 1:
+                    random.shuffle(addrs)
+                for relay in addrs:
+                    print(prec_group + str(relay))
+                    if not args.all:
+                        return 0
+                    found += 1
+                    group_found += 1
+            else:
+                print(prec_group + str(relay))
+                if not args.all:
+                    return 0
+                found += 1
+                group_found += 1
 
-            print(relay)
-            return 0
+        if group_found != 0:
+            prec_group += '#'
 
-    print('no results from DRIAD lookup: "%s"' %
-            ' '.join([str(x) for x in initial_cmd]), file=sys.stderr)
-    return -1
+    if found == 0:
+        print('no results from DRIAD lookup: "%s"' %
+                ' '.join([str(x) for x in initial_cmd]), file=sys.stderr)
+        return -1
+
+    return 0
 
 if __name__=="__main__":
     ret = main(sys.argv)
