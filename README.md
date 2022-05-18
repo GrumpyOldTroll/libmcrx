@@ -107,7 +107,7 @@ int receive_thread() {
   mcrx_ctx_new(&ctx);
 
   struct mcrx_subscription_config conf = MCRX_SUBSCRIPTION_CONFIG_INIT;
-  mxrx_subscription_config_pton(&conf, "23.212.185.4", "232.1.1.1");
+  mcrx_subscription_config_pton(&conf, "23.212.185.4", "232.1.1.1");
   conf.port = 5001;
 
   struct mcrx_subscription *sub;
