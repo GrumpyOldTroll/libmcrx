@@ -18,13 +18,10 @@ static_library("mcrx") {
     "src/wait.c",
   ]
 
-  public_configs = [ ":libmcrx_config" ]
-
   deps = []
 
   configs -= [ "//build/config/compiler:chromium_code" ]
-  configs += [
-    ":libmcrx_config",
-    "//build/config/compiler:no_chromium_code",
-  ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+
+  public_configs = [ ":libmcrx_config" ]
 }
